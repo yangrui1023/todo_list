@@ -886,6 +886,22 @@ body {
 .quant-unit { font-size: 14px; color: var(--text-muted); white-space: nowrap; }
 .quant-input-hint { font-size: 13px; color: var(--text-secondary); margin: 8px 0 2px; }
 .quant-input-tip { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+.num-input-wrap { display: flex; align-items: center; gap: 8px; }
+.num-input-wrap .modal-input { flex: 1; }
+.sign-toggle {
+  flex: 0 0 auto;
+  width: 44px; height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 20px; line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  user-select: none; -webkit-user-select: none;
+  transition: background .12s, color .12s;
+}
+.sign-toggle:active { background: var(--primary); color: #fff; }
 
 /* ===== Quant badge (checkin page) ===== */
 .note-btn {
@@ -2478,6 +2494,25 @@ function getTotalCount(itemId) {
 // ===== Generic Edit Modal =====
 let editModalState = null;
 
+// 一键切换正负号（解决手机端数字键盘无负号键的问题）
+function toggleSign(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const v = el.value.trim();
+  el.value = v.startsWith('-') ? v.slice(1) : '-' + v;
+  el.focus();
+}
+
+// 输入净化：仅保留可选前导负号 + 数字 + 单个小数点（兼容逗号作小数点）
+function sanitizeNumberInput(el) {
+  let v = el.value;
+  const neg = v.trim().startsWith('-');
+  let digits = v.replace(/[^0-9.,]/g, '').replace(/,/g, '.');
+  const dot = digits.indexOf('.');
+  if (dot !== -1) digits = digits.slice(0, dot + 1) + digits.slice(dot + 1).replace(/\./g, '');
+  el.value = (neg ? '-' : '') + digits;
+}
+
 function openEditModal(title, sub, bodyHtml, state, okLabel) {
   document.getElementById('editModalTitle').textContent = title;
   document.getElementById('editModalSub').textContent = sub || '';
@@ -2787,8 +2822,11 @@ function editItemConfig(catId, itemId) {
        <label>量化单位（如：杯、分钟、公里、个、元）</label>
        <input class="modal-input" id="modalUnit" maxlength="10" placeholder="杯" value="${item.quant ? escapeHtml(item.quant.unit) : ''}">
        <label>目标数值（每天，可为负）</label>
-       <input class="modal-input" id="modalTarget" type="text" inputmode="decimal" placeholder="8"
-         value="${item.quant ? item.quant.target : ''}">
+       <div class="num-input-wrap">
+         <button type="button" class="sign-toggle" onclick="toggleSign('modalTarget')" title="切换正负号（±）" aria-label="切换正负号">±</button>
+         <input class="modal-input" id="modalTarget" type="text" inputmode="decimal" placeholder="8"
+           value="${item.quant ? item.quant.target : ''}" oninput="sanitizeNumberInput(this)">
+       </div>
        <label>达标判定方式</label>
        <select class="modal-input" id="modalCompare">
          <option value="gte" ${(item.quant && item.quant.compare === 'lte') ? '' : 'selected'}>完成值不低于目标即达标（默认）</option>
@@ -2808,9 +2846,10 @@ function openQuantInput(itemId) {
   const goalText = `目标 ${item.quant.target} ${item.quant.unit}/天`;
   openEditModal(`${item.name} 打卡`,
     `${formatDate(currentDate)} · ${goalText}`,
-    `<div class="quant-input-row">
+    `     <div class="quant-input-row">
+       <button type="button" class="sign-toggle" onclick="toggleSign('modalQuantValue')" title="切换正负号（±）" aria-label="切换正负号">±</button>
        <input class="modal-input" id="modalQuantValue" type="text" inputmode="decimal"
-         value="${cur}" placeholder="实际完成数值（可为负）">
+         value="${cur}" placeholder="实际完成数值（可为负）" oninput="sanitizeNumberInput(this)">
        <span class="quant-unit">${escapeHtml(item.quant.unit)}</span>
      </div>
      <div class="quant-input-tip">填写 0 或留空 = 取消本次打卡；可输入负值（如体重、盈亏）。${item.quant.target} ${item.quant.unit} 才算达标</div>`,
