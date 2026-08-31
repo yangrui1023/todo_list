@@ -2149,7 +2149,6 @@ function renderCheckin() {
         const val = rec ? rec.value : 0;
         const target = item.quant.target;
         const unit = item.quant.unit;
-        const cmpSym = ((item.quant.compare) || 'gte') === 'lte' ? '≤' : '≥';
         const doneClass = isDoneNow ? 'done' : (isCheckedNow ? 'partial' : '');
         html += `<div class="checkin-item ${isCheckedNow ? 'checked' : ''} ${doneClass}" onclick="openQuantInput('${item.id}')">
           <div class="checkin-checkbox">
@@ -2158,7 +2157,7 @@ function renderCheckin() {
           <span class="checkin-item-name">${escapeHtml(item.name)}</span>
           ${noteText}
           <div class="checkin-right">
-            <span class="quant-badge ${isDoneNow ? 'ok' : (isCheckedNow ? 'low' : '')}">${val} ${cmpSym} ${target} ${escapeHtml(unit)}</span>
+            <span class="quant-badge ${isDoneNow ? 'ok' : (isCheckedNow ? 'low' : '')}">${val}/${target} ${escapeHtml(unit)}</span>
             ${streak >= 2 ? `<span class="checkin-streak">🔥 ${streak}天</span>` : ''}
             ${noteBtn}
           </div>
@@ -2320,13 +2319,12 @@ function renderTrendSvg(item, days) {
     return `<circle cx="${px}" cy="${py}" r="2.8" fill="${hit ? '#059669' : '#d97706'}" stroke="#fff" stroke-width="1"/>`;
   }).join('');
 
-  const sym = cmp === 'lte' ? '≤' : '≥';
   const textY = (tyNum - 4) < (padT + 6) ? (tyNum + 10) : (tyNum - 4);
   return `<svg class="trend-svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">
     <line x1="${padL}" y1="${ty}" x2="${W - padR}" y2="${ty}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4 3" opacity="0.75"/>
     <path d="${path}" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     ${dots}
-    <text x="${W - padR}" y="${textY}" text-anchor="end" font-size="9" fill="#dc2626" opacity="0.8">目标 ${sym} ${target}</text>
+    <text x="${W - padR}" y="${textY}" text-anchor="end" font-size="9" fill="#dc2626" opacity="0.8">目标 ${target}</text>
   </svg>`;
 }
 
