@@ -1,0 +1,3026 @@
+<!DOCTYPE html>
+<html data-page-node-id="k1JWWjiQtdVbEaJB2h2NoZ" lang="zh-CN">
+<head data-page-node-id="xSaJpTpRkJCcrsKjCGvBca">
+<script data-page-node-id="e9baYCHYc0BitGGYkxWD1q" src="/page/page_comm/inject.js"></script>
+<meta data-page-node-id="nvSPlHq6rQBZsj9J0YuPpD" charset="UTF-8">
+<meta data-page-node-id="0YXW27EfgZqxne4oC94TBQ" content="width=device-width, initial-scale=1.0" name="viewport">
+<title data-page-node-id="zxbQM2jGNpSJxiAJmx0xKN" data-pnid-children="4j1LklGKYGIjI9m20EdPsX">每日打卡 - 习惯追踪</title>
+<style data-page-node-id="Td1dvetpE0OAwltLALQ3PU" data-pnid-children="T22T2CoF0FSfNQfmOQKZiS">
+:root {
+  --bg: #f5f7fa;
+  --card-bg: #ffffff;
+  --text: #1a1a2e;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --border: #e5e7eb;
+  --primary: #4f46e5;
+  --primary-light: #ede9fe;
+  --primary-dark: #4338ca;
+  --success: #10b981;
+  --success-light: #d1fae5;
+  --warning: #f59e0b;
+  --warning-light: #fef3c7;
+  --danger: #ef4444;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.1);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== Header ===== */
+.header {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow);
+}
+.header-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header-title {
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.header-title .logo { font-size: 24px; }
+.header-date {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.header-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.header-right #userBadge {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+.icon-btn:hover { background: var(--bg); color: var(--text); }
+.icon-btn svg { width: 20px; height: 20px; }
+.logout-btn:hover { color: var(--danger); }
+
+/* ===== Action menu (⋮ dropdown) ===== */
+.action-trigger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-secondary);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+.action-trigger:hover { background: var(--bg); color: var(--text); }
+.action-trigger.active { background: var(--primary-light); color: var(--primary); }
+.action-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  min-width: 168px;
+  z-index: 200;
+  padding: 4px;
+  display: none;
+}
+.action-menu.show { display: block; }
+.action-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.action-menu-item:hover { background: var(--bg); }
+.action-menu-item.danger { color: var(--danger); }
+.action-menu-item.danger:hover { background: var(--danger-light); }
+.action-menu-item .menu-icon { font-size: 16px; width: 18px; text-align: center; }
+
+/* ===== Tabs ===== */
+.tabs {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  position: sticky;
+  top: 61px;
+  z-index: 99;
+}
+.tab {
+  flex: 1;
+  padding: 14px 0;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+  user-select: none;
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+/* ===== Main Content ===== */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+  padding-bottom: 80px;
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ===== Date Bar ===== */
+.date-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+.date-bar-left { display: flex; align-items: center; gap: 12px; }
+.date-bar-left .day-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.date-bar-left .date-value {
+  font-size: 18px;
+  font-weight: 600;
+}
+.date-nav-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--card-bg);
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  color: var(--text-secondary);
+}
+.date-nav-btn:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.date-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ===== Today Progress ===== */
+.today-progress {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+.today-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.today-progress-label { font-size: 14px; font-weight: 600; }
+.today-progress-count { font-size: 14px; color: var(--text-secondary); }
+.today-progress-count .done { color: var(--success); font-weight: 600; }
+.progress-bar {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), #7c3aed);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+/* ===== Category Card ===== */
+.category-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.category-icon { font-size: 22px; }
+.category-name { font-size: 17px; font-weight: 600; }
+.category-count {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+/* ===== Checkin Items ===== */
+.checkin-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.checkin-item:last-child { border-bottom: none; }
+.checkin-item:hover { background: var(--bg); margin: 0 -18px; padding: 12px 18px; border-radius: var(--radius-sm); }
+.checkin-checkbox {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  margin-right: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.checkin-item.checked .checkin-checkbox {
+  background: var(--success);
+  border-color: var(--success);
+}
+.checkin-checkbox svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: white;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.checkin-item.checked .checkin-checkbox svg { opacity: 1; }
+.checkin-item-name {
+  font-size: 15px;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.2s;
+  min-width: 40px;
+}
+.checkin-item.checked .checkin-item-name {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.checkin-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 8px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: 8px;
+  align-self: center;
+}
+.checkin-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.checkin-streak {
+  font-size: 12px;
+  color: var(--warning);
+  background: #fef3c7;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+/* ===== Stats Tab ===== */
+.stats-period-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 6px;
+  box-shadow: var(--shadow);
+}
+.period-btn {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.period-btn.active {
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+}
+.stats-period-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 4px 6px;
+  box-shadow: var(--shadow);
+}
+.period-nav-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+}
+.period-nav-btn:hover { background: var(--bg); color: var(--text); }
+.period-nav-label {
+  flex: 1;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 0;
+  border-radius: var(--radius-sm);
+}
+.period-nav-label:hover { color: var(--primary); background: var(--bg); }
+.nav-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  background: var(--primary);
+  padding: 2px 8px;
+  border-radius: 8px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.stats-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.stats-summary-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.stats-summary-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.stats-summary-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.stats-category-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.stats-item-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.stats-item-row:last-child { border-bottom: none; }
+.stats-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.stats-item-name { font-size: 15px; font-weight: 500; }
+.stats-item-freq {
+  font-size: 14px;
+  font-weight: 600;
+}
+.stats-item-freq .current { color: var(--primary); }
+.stats-item-freq .total { color: var(--text-muted); }
+.stats-item-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.stats-item-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.stats-item-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ===== Management Tab ===== */
+.manage-section {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.manage-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.add-category-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.add-category-form input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.add-category-form input:focus { border-color: var(--primary); }
+.add-category-form select {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  outline: none;
+  background: var(--card-bg);
+  cursor: pointer;
+}
+.btn {
+  padding: 10px 18px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+.btn-danger {
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.btn-danger:hover { background: var(--danger); color: white; }
+.btn-warning {
+  background: transparent;
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.btn-warning:hover { background: var(--warning); color: white; }
+.btn-success {
+  background: transparent;
+  border: 1px solid var(--success);
+  color: var(--success);
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.btn-success:hover { background: var(--success); color: white; }
+
+.manage-category {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.manage-category-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  position: relative;
+}
+.manage-category-header .icon { font-size: 20px; }
+.manage-category-header .name { font-size: 15px; font-weight: 600; flex: 1; }
+.manage-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  position: relative;
+}
+.manage-item-row .name { flex: 1; font-size: 14px; }
+.manage-btn-group { display: flex; gap: 6px; }
+.manage-add-item {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.manage-add-item input {
+  flex: 1;
+  max-width: 320px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  outline: none;
+}
+.manage-add-item input:focus { border-color: var(--primary); }
+.manage-add-item .btn { padding: 8px 14px; font-size: 13px; }
+
+/* Archived items */
+.manage-category.archived { opacity: 0.65; }
+.manage-item-row.archived .name { color: var(--text-muted); text-decoration: line-through; }
+.archived-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--text-muted);
+  color: white;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.archived-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.archived-section-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.archived-categories {
+  margin-top: 20px;
+}
+.archived-categories-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border);
+}
+.stats-item-row.archived { opacity: 0.55; }
+.stats-item-row.archived .stats-item-name { color: var(--text-muted); }
+.stats-category-card.archived { opacity: 0.65; }
+
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.icon-option {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 18px;
+  background: var(--bg);
+  transition: all 0.15s;
+}
+.icon-option:hover { background: var(--primary-light); }
+.icon-option.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.data-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ===== Cloud Sync ===== */
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+.sync-dot.online { background: var(--success); animation: pulse 2s infinite; }
+.sync-dot.syncing { background: var(--warning); animation: pulse 1s infinite; }
+.sync-dot.offline { background: var(--text-muted); }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.cloud-section {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.cloud-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.cloud-status-badge.enabled {
+  background: var(--success-light);
+  color: var(--success);
+}
+.cloud-status-badge.disabled {
+  background: var(--bg);
+  color: var(--text-muted);
+}
+.cloud-form { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.cloud-form input {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.cloud-form input:focus { border-color: var(--primary); }
+.cloud-form .btn { align-self: flex-start; }
+.cloud-instructions {
+  margin-top: 14px;
+  padding: 14px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+}
+.cloud-instructions ol { padding-left: 20px; }
+.cloud-instructions a { color: var(--primary); }
+.cloud-instructions code {
+  background: var(--card-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  display: inline-block;
+  margin: 2px 0;
+}
+.cloud-sql-block {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: 'Fira Code', monospace;
+  margin: 8px 0;
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.5;
+}
+
+/* QR Code Modal */
+.qr-modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+}
+.qr-modal-overlay.show { display: flex; }
+.qr-modal {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 28px;
+  max-width: 320px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.qr-modal h3 { font-size: 16px; margin-bottom: 6px; }
+.qr-modal p { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+.qr-modal img { width: 220px; height: 220px; border-radius: var(--radius-sm); margin-bottom: 12px; }
+.qr-modal .qr-link {
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+  background: var(--bg);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  max-height: 60px;
+  overflow-y: auto;
+}
+.qr-modal .btn { margin: 0 4px; }
+
+/* ===== Generic Modal ===== */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 9998;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 90%;
+  max-width: 340px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.modal h3 { font-size: 16px; margin-bottom: 4px; }
+.modal .modal-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+.modal label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 12px 0 4px;
+}
+.modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+}
+.modal-input:focus { border-color: var(--primary); }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+.modal-actions .btn { margin: 0; }
+.quant-toggle-row {
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.quant-toggle-row input { margin-right: 6px; }
+.quant-input-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.quant-input-row .modal-input { flex: 1; }
+.quant-unit { font-size: 14px; color: var(--text-muted); white-space: nowrap; }
+.quant-input-hint { font-size: 13px; color: var(--text-secondary); margin: 8px 0 2px; }
+.quant-input-tip { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+/* ===== Quant badge (checkin page) ===== */
+.note-btn {
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  opacity: 0.45;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+.note-btn:hover { opacity: 1; background: var(--bg); }
+.note-btn.has { opacity: 1; }
+.note-textarea { resize: vertical; font-family: inherit; min-height: 64px; }
+.nocount-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--warning-light);
+  color: var(--warning);
+  margin-left: 4px;
+  vertical-align: middle;
+  font-weight: 500;
+}
+.startdate-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--primary-light);
+  color: var(--primary);
+  margin-left: 4px;
+  vertical-align: middle;
+  font-weight: 500;
+}
+.btn-active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+
+/* Toggle switch with label (countInStats) */
+.switch-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.switch-pill:hover { border-color: var(--primary); }
+.switch-pill.on {
+  color: var(--success);
+  border-color: var(--success);
+  background: var(--success-light);
+}
+.switch-pill.off .switch-label { color: var(--text-muted); }
+.switch-track {
+  position: relative;
+  width: 24px;
+  height: 14px;
+  border-radius: 14px;
+  background: var(--border);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.switch-track.on { background: var(--success); }
+.switch-knob {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+.switch-track.on .switch-knob { transform: translateX(10px); }
+
+/* Add-category: 纳入统计 checkbox */
+.add-cat-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.add-cat-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--success);
+  cursor: pointer;
+}
+.checkin-item .quant-badge {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.checkin-item .quant-badge.ok { background: var(--success-light); color: var(--success); }
+.checkin-item .quant-badge.low { background: var(--warning-light); color: var(--warning); }
+.checkin-item.partial .checkin-checkbox {
+  border-color: var(--warning);
+  background: var(--warning-light);
+}
+
+/* ===== Quant stats (unified with plain item rows) ===== */
+.quant-target-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 1px 8px;
+  border-radius: 8px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.quant-row .trend-svg { margin-top: 8px; }
+.quant-row .stats-item-meta { margin-top: 6px; }
+.trend-svg { display: block; margin-top: 10px; }
+
+/* ===== Calendar ===== */
+.calendar-wrap {
+  margin: 12px 0;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+.calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.calendar-header .cal-month { font-size: 14px; font-weight: 600; }
+.cal-nav-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px 10px;
+  border-radius: 6px;
+}
+.cal-nav-btn:hover { background: var(--bg); color: var(--text); }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-weekday {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+.cal-day {
+  position: relative;
+  text-align: center;
+  padding: 6px 0 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+}
+.cal-day:hover { background: var(--bg); }
+.cal-day.today { font-weight: 700; color: var(--primary); }
+.cal-day.selected { background: var(--primary); color: #fff; font-weight: 600; }
+.cal-day.other { color: var(--text-muted); opacity: 0.4; }
+.cal-day .cal-count {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  line-height: 1;
+  background: var(--success-light);
+  color: var(--success);
+  border-radius: 8px;
+  padding: 2px 4px;
+  min-width: 16px;
+  font-weight: 600;
+}
+.cal-day .cal-count.zero { display: none; }
+.cal-day.selected .cal-count { background: rgba(255,255,255,0.3); color: #fff; }
+
+/* ===== Manage edit buttons ===== */
+.btn-icon { background: none; border: none; cursor: pointer; font-size: 14px; padding: 4px 6px; border-radius: 6px; color: var(--text-muted); transition: background 0.2s; }
+.btn-icon:hover { background: var(--bg); color: var(--text); }
+.manage-item-row .btn-icon { margin-right: 4px; }
+.btn-sm { font-size: 12px; padding: 3px 10px; }
+/* Unify category-header action buttons: 纳入统计 / 编辑 / 归档 / 删除 */
+.manage-category-header .manage-btn-group .btn,
+.manage-category-header .manage-btn-group .switch-pill {
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 8px;
+}
+.quant-mini {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--warning);
+  background: var(--warning-light);
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ===== Auth Gate ===== */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+.auth-overlay.hidden { display: none; }
+.auth-card {
+  background: white;
+  border-radius: 20px;
+  padding: 40px 32px;
+  width: 90%;
+  max-width: 360px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  animation: authFadeIn 0.4s ease;
+}
+@keyframes authFadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.auth-icon { font-size: 48px; margin-bottom: 12px; }
+.auth-title { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.auth-subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
+.auth-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  outline: none;
+  text-align: center;
+  transition: border-color 0.2s;
+  margin-bottom: 10px;
+}
+.auth-input:focus { border-color: var(--primary); }
+.auth-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.auth-btn:hover { background: var(--primary-dark); }
+.auth-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.auth-error {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--danger);
+  min-height: 18px;
+}
+.auth-toggle {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.auth-toggle a {
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 600;
+}
+.auth-toggle a:hover { text-decoration: underline; }
+
+/* ===== Empty State ===== */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state .text { font-size: 15px; }
+
+/* ===== Toast ===== */
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--text);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-size: 14px;
+  z-index: 200;
+  transition: transform 0.3s ease;
+  pointer-events: none;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ===== Responsive ===== */
+@media (max-width: 600px) {
+  .container { padding: 10px; }
+  .header-title { font-size: 17px; }
+  .stats-summary { grid-template-columns: 1fr; }
+  .stats-summary-card { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
+  .stats-summary-value { font-size: 20px; }
+  .stats-summary-label { margin-top: 0; }
+}
+</style>
+</head>
+<body data-page-node-id="xraPhCJy45t7HOJk4qwQ6h">
+
+<div data-page-node-id="SIYF5zJFn1rjxGh6wSfzMG" class="auth-overlay" id="authOverlay">
+  <div data-page-node-id="wfDQOYA2iQboiehoLtV1u5" class="auth-card">
+    <div data-page-node-id="bxSfHDU0ppDVjb7sylAhwz" class="auth-icon" id="authIcon"><!--pnid:FqRgS6y6f1A6Hpn3wAIM0O-->🔐</div>
+    <div data-page-node-id="cdJfCIOjoVs8u9hwOhneRN" class="auth-title"><!--pnid:lx8NpYx9dYfQb3CM2rpAwi-->每日打卡</div>
+    <div data-page-node-id="U6GPxNDjkV9YFBMwU0cJwt" class="auth-subtitle" id="authSubtitle"><!--pnid:RzZPpHtL3cBWIjkQezJlBL-->登录你的账号</div>
+    <input data-page-node-id="KBNZTIo7P1Bi30sLIDiPMH" autocomplete="email" class="auth-input" id="authEmail" onkeydown="if(event.key==='Enter') document.getElementById('authPassword').focus()" placeholder="邮箱地址" type="email">
+    <input data-page-node-id="lfdRc0cNoyRDrWnzOZwnUk" autocomplete="current-password" class="auth-input" id="authPassword" onkeydown="if(event.key==='Enter') handleAuth()" placeholder="密码（至少6位）" type="password">
+    <button data-page-node-id="Lk9IUX9E8jqYL8mjwp2u2o" class="auth-btn" id="authBtn" onclick="handleAuth()"><!--pnid:yxia0fjbYrXNsh5W2zR7kA-->登录</button>
+    <div data-page-node-id="FNGiCLOYrNHxPgS0ZiapvU" class="auth-error" id="authError"></div>
+    <div data-page-node-id="jyhOfLTJWyVIt1biEKVs6y" class="auth-toggle" id="authToggle"><!--pnid:PSBRygpPhY786gVESh7FEv-->
+      还没有账号？<a data-page-node-id="Vpl20hPYW6mlcudiLtcxrS" onclick="switchAuthMode('register')"><!--pnid:br65uXMxz5sErLySuqa7GB-->注册新账号</a>
+    </div>
+  </div>
+</div>
+
+<div data-page-node-id="NuNu1BWvEmNA5TeqUthT0i" class="header">
+  <div data-page-node-id="B2dJIvFpSAxgqaLCWGjHB2" class="header-inner">
+    <div data-page-node-id="CTzzzJeEYYBnG0r8pcoZAZ" class="header-title">
+      <span data-page-node-id="G4slf4RpR1ZfAtWX1ixs2o" class="logo"><!--pnid:yrYNv4Mzd7wCNrOFxec7YW-->✅</span>
+      <span data-page-node-id="z7DhvSXq9QhXUjoMu7CakQ"><!--pnid:kcjup87IUNjL9sCg8yBU0y-->每日打卡</span>
+    </div>
+    <div data-page-node-id="83k5RoKjqoYPKYauj33Do8" class="header-right">
+      <div data-page-node-id="sXwBW4zL6mSBf2QCB8cUp7" class="sync-status" id="syncStatus" style="display:none">
+        <span data-page-node-id="QpxspduAoIEruMUZCmIyVB" class="sync-dot offline" id="syncDot"></span>
+        <span data-page-node-id="Lvxukn0RqAcFKYWZ45zU8d" id="syncText"><!--pnid:88HPozXXLqHMxrIVM9Mw6p-->未连接</span>
+      </div>
+      <span data-page-node-id="RP16lDZmmYhsuhemIizcXW" id="userBadge"></span>
+      <button data-page-node-id="tYdu0i8QcPgb6aYk9yPKA3" aria-label="退出登录" class="icon-btn logout-btn" onclick="signOutUser()" title="退出登录">
+        <svg data-page-node-id="GQDJJJrmVi3T7sNCXetGx1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path data-page-node-id="Tw5IQLpl1fITlUaeAsBJeY" d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline data-page-node-id="KRcT3nV9mpECmKeafCPXgV" points="16 17 21 12 16 7"/><line data-page-node-id="M6PG2Oro0XClVDLI0rqaRi" x1="21" x2="9" y1="12" y2="12"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div data-page-node-id="b71bnQnaVHL1s2LDR92M7D" class="tabs">
+  <div data-page-node-id="0SUmbWivVZxfK4OXJ4G3uJ" class="tab active" data-tab="checkin" onclick="switchTab('checkin')"><!--pnid:ax3yUKGRX6mqDKkrRDAL7D-->今日打卡</div>
+  <div data-page-node-id="yQdcB7FJW2gUp75BrstnNr" class="tab" data-tab="stats" onclick="switchTab('stats')"><!--pnid:6TLPYxZevqXoCJdG1BPQVA-->统计分析</div>
+  <div data-page-node-id="yG2OJ3Guv6FvGgYLDLcNDn" class="tab" data-tab="manage" onclick="switchTab('manage')"><!--pnid:6n7ezAqZW3rnzWIoQyQj8v-->分类管理</div>
+</div>
+
+<div data-page-node-id="zbUN6G0IU1riSfmuxGwJTf" class="container">
+  <!--pnid:1j8LB3atS1dU2PFGxvzqs1--><!-- ===== Tab: Checkin ===== -->
+  <div data-page-node-id="BKdezgXTNKVCoAlIHwLnru" class="tab-content active" id="tab-checkin">
+    <div data-page-node-id="B4Od6n70TdXVYrxfykJELd" class="date-bar">
+      <div data-page-node-id="4iRo8AOvgWUQAD2WS32iCF" class="date-bar-left">
+        <button data-page-node-id="ibeS6S0oujCBdBMN8G5YAe" class="date-nav-btn" onclick="changeDate(-1)"><!--pnid:YbpH3ljI6J4ovTjHCdfgKf-->‹</button>
+        <div data-page-node-id="5J5WWbgoify8nGdvp67Ixw">
+          <div data-page-node-id="5vGNg8RRhXnzxXZStVK4HU" class="day-label" id="dayLabel"></div>
+          <div data-page-node-id="WEdTT6iYqQdsNIlJ9gcYkv" class="date-value" id="dateValue"></div>
+        </div>
+        <button data-page-node-id="H7wmjepvJUb4Lr42qaJ6Fe" class="date-nav-btn" onclick="changeDate(1)"><!--pnid:AIWoiWOSxfVRBYRwqPXMPC-->›</button>
+      </div>
+      <button data-page-node-id="xPVoUbNvA2EIEZNNSe2Olp" class="btn btn-outline" id="todayBtn" onclick="goToday()"><!--pnid:tRK8XVYJZ877jmfM3fHkda-->今天</button>
+      <button data-page-node-id="SUahc9k7agFDoPWEqEgOHY" class="btn btn-outline" id="calToggleBtn" onclick="toggleCalendar()"><!--pnid:hKeSHxaILIKJ94SNLYNBS5-->📅</button>
+    </div>
+
+    <div data-page-node-id="Qg9cuDwe1lULxn7dgCjUc7" class="calendar-wrap" id="calendarWrap" style="display:none">
+      <div data-page-node-id="mh7ql0ofXdU2z0i5dCX6HK" class="calendar-header">
+        <button data-page-node-id="p0sYAXgLcq6Oevx9uYC1sZ" class="cal-nav-btn" onclick="changeCalMonth(-1)"><!--pnid:M2hBu75XfBR8PoXnjWpD35-->‹</button>
+        <span data-page-node-id="RkNKt7ABNfv4qKImmL5bzC" class="cal-month" id="calMonthLabel"></span>
+        <button data-page-node-id="0vP4j5L1brApfNO39FXdiA" class="cal-nav-btn" onclick="changeCalMonth(1)"><!--pnid:AqxEVYJdpKbu1YKWDiJU7e-->›</button>
+      </div>
+      <div data-page-node-id="QdioW4FiyVc95OG8pkdRls" class="calendar-grid" id="calendarGrid"></div>
+    </div>
+
+    <div data-page-node-id="9r9gtawUmtoMdGv9qNzVEt" class="today-progress">
+      <div data-page-node-id="UuZBqc1bjjku0bPyOaD4Zz" class="today-progress-header">
+        <span data-page-node-id="xWe5aHDXGDXyBFplYFIFww" class="today-progress-label"><!--pnid:gdRKQhZ431QIwJqjgLHmwO-->今日完成</span>
+        <span data-page-node-id="BU7gLTEFps0pGJ4Z4n0jep" class="today-progress-count" id="progressCount"></span>
+      </div>
+      <div data-page-node-id="geKl4cFciP1CnIVexEFVSu" class="progress-bar">
+        <div data-page-node-id="kpcWrecEikz2B1QNxG47u9" class="progress-bar-fill" id="progressBar" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div data-page-node-id="uIhODcXPAUz9DlUyg3xmUs" id="checkinList"></div>
+  </div>
+
+  <!--pnid:tDMcetyK5XQ7BgoqGX1mrM--><!-- ===== Tab: Stats ===== -->
+  <div data-page-node-id="FgVGnTwSgJaGdIBUIHFANo" class="tab-content" id="tab-stats">
+    <div data-page-node-id="0hTjqa7sdVcB3E1EtKMVeu" class="stats-period-selector">
+      <button data-page-node-id="Z33OX9rIsBBKoKiadwAPSN" class="period-btn active" data-period="week" onclick="switchPeriod('week')"><!--pnid:L1DGwvMJJIriikKnUY3EDl-->周</button>
+      <button data-page-node-id="kCvD2OfziUVCKdemrC6Db9" class="period-btn" data-period="month" onclick="switchPeriod('month')"><!--pnid:uV1NfLCQ8ckcxuTSRSi5z2-->月</button>
+      <button data-page-node-id="sYl7VAebmF7Oa9OX1i1umq" class="period-btn" data-period="year" onclick="switchPeriod('year')"><!--pnid:BJiJqXYZafXL159v2BIbwF-->年</button>
+    </div>
+
+    <div data-page-node-id="cVqf7Bjp6uykLt4CuEgFYe" class="stats-period-nav">
+      <button data-page-node-id="nHPF4hnVf4eVLNdMuAGJMx" class="period-nav-btn" onclick="changeStatsOffset(-1)" title="上一周期"><!--pnid:K1I3yJriPwOXKVkC4dydSG-->‹</button>
+      <div data-page-node-id="k3iImsTHFu8lAxixKh1m41" class="period-nav-label" id="statsPeriodLabel" onclick="resetStatsOffset()" title="点击回到当前周期"></div>
+      <button data-page-node-id="aXQWtppBw4MMT8wuwU5lOF" class="period-nav-btn" onclick="changeStatsOffset(1)" title="下一周期"><!--pnid:UA6FeOdBhhXITtOguusMrP-->›</button>
+    </div>
+
+    <div data-page-node-id="6FT7CMITIzPqO0QC2mCU9E" class="stats-summary" id="statsSummary"></div>
+    <div data-page-node-id="ZZfIpJj3cxU1uqWpoh1skS" id="statsList"></div>
+  </div>
+
+  <!--pnid:LaIc5R1lCskG7hmkkzpNoE--><!-- ===== Tab: Manage ===== -->
+  <div data-page-node-id="GmT6KicUrj7CY0J7GCAm8X" class="tab-content" id="tab-manage">
+    <div data-page-node-id="Fe1EXjrSQVFektRvamInXe" class="manage-section">
+      <div data-page-node-id="VmVItFRYAFSjR1LOHXsah6" class="manage-section-title"><!--pnid:KGuJ9nuxdb6BUSbHO2QrsU-->📋 添加分类</div>
+      <div data-page-node-id="LPcwqNb16MUx4HHNh4ScU6" class="add-category-form">
+        <input data-page-node-id="0DyaqMbPp8STTFQ90CkQxR" id="newCatName" maxlength="20" placeholder="分类名称（如：健康）" type="text">
+      </div>
+      <label data-page-node-id="JgLOtan4MIXkqy329gZZo5" class="add-cat-check" for="newCatCountInStats">
+        <input data-page-node-id="dfGuFK3Td1lgVrkhXam2Ae" checked id="newCatCountInStats" type="checkbox"><!--pnid:WSZ4Zt5I8j9V6wZtQRLTnX-->
+        纳入统计（参与总打卡次数 / 完成率统计）
+      </label>
+      <div data-page-node-id="ApoN5hNgpjkiEt0wOP6SbG" style="margin-top:12px">
+        <button data-page-node-id="Vi0OVakdIQnKOU4qzVgAsv" class="btn btn-primary" onclick="addCategory()"><!--pnid:TPUywVgt2qv5D7jNvargpR-->+ 添加分类</button>
+      </div>
+    </div>
+
+    <div data-page-node-id="sMphVsk5sNFzTpycNmNC1M" class="manage-section">
+      <div data-page-node-id="mh9gKtObJgJIOUeUo1owZX" class="manage-section-title"><!--pnid:OCNN0auUUBw9Zv83K9a5DE-->📁 已有分类</div>
+      <div data-page-node-id="7QDOR9H4CLn8QYtMMSbKI9" id="manageList"></div>
+    </div>
+
+    <div data-page-node-id="n9S2Q4mVfzZVu3uk8Mv0wV" class="cloud-section">
+      <div data-page-node-id="Qv38oXJVYbyV2005UY3Bjm" class="manage-section-title"><!--pnid:7kfeCAHyoTqhLgudL2R2k5-->☁️ 账号与同步</div>
+      <div data-page-node-id="EeGLIoog7p6kMRPVNC9MWv" id="cloudStatusDisplay"></div>
+    </div>
+
+    <div data-page-node-id="KnCNGSjKTahxGeUe6nr4X7" class="manage-section">
+      <div data-page-node-id="j8vg3eJdn7ajs3GP4R0P9Q" class="manage-section-title"><!--pnid:9bBtcQ9fD6Jyb5TMeVY143-->💾 数据管理</div>
+      <div data-page-node-id="EuckLbcAUjEuxZX65MUpG0" class="data-actions">
+        <button data-page-node-id="vpQJZ3tSVlLapFfOMqXMgW" class="btn btn-outline" onclick="exportData()"><!--pnid:H7r0QKSEWqJhWs1zqAScZQ-->导出数据</button>
+        <button data-page-node-id="wwg4t5dWnv5SCoZsxmszN1" class="btn btn-outline" onclick="document.getElementById('importFile').click()"><!--pnid:v9fd0e9Rd066cE3BppGWMO-->导入数据</button>
+        <input data-page-node-id="ltkhA6nht69CsAKJI34eSK" accept=".json" id="importFile" onchange="importData(event)" type="file" style="display:none">
+        <button data-page-node-id="WbyDrb7myeo04WnyVRSybd" class="btn btn-danger" onclick="clearAllData()"><!--pnid:CBtu0G5Ab3wMyTh82yixFw-->清空所有数据</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div data-page-node-id="6CIVpcILxSjlNQu9IUMRT4" class="modal-overlay" id="editModal" onclick="if(event.target===this) closeEditModal()">
+  <div data-page-node-id="Bu2hUdpUfSM0c7hcvt0VuC" class="modal">
+    <h3 data-page-node-id="teOZedUkoAQKNTdYa5nHiV" id="editModalTitle"></h3>
+    <div data-page-node-id="uyQLB77frQAIJbeSR8YqMC" class="modal-sub" id="editModalSub"></div>
+    <div data-page-node-id="6BC6TEVqZBWtKcD0PKUHQz" id="editModalBody"></div>
+    <div data-page-node-id="qTH2lGkfFxeG6vZYfYrnuv" class="modal-actions">
+      <button data-page-node-id="9O26bLeBGQnsFTQpDuunE9" class="btn btn-outline" onclick="closeEditModal()"><!--pnid:zOUti6VtfF9dzbhnvqVkSl-->取消</button>
+      <button data-page-node-id="uvPEeLCkr3V0YclJbRiAtD" class="btn btn-primary" id="editModalOk" onclick="confirmEditModal()"><!--pnid:beaYaBKfSn7IxnATxOiLct-->确定</button>
+    </div>
+  </div>
+</div>
+
+<div data-page-node-id="pIKBDY9xzUFsMNYwvzMYYt" class="toast" id="toast"></div>
+
+<script data-page-node-id="PqHExR5XTp3gCDBHWbN5Pi" data-pnid-children="hmPndJtjq4HWNksaQ2OLG9">
+// ===== Data Layer =====
+function getStorageKey() {
+  return currentUser ? `checkin_app_data_${currentUser.id}` : STORAGE_KEY;
+}
+const STORAGE_KEY = 'checkin_app_data';
+const ICONS = [
+  // 饮食
+  '💧','🥛','🍵','☕','🧃','🥤','🍷','🍺','🥗','🥦',
+  '🍎','🍊','🍋','🍌','🍉','🍇','🍓','🍒','🍑','🥭',
+  '🍍','🥝','🍅','🥑','🍆','🌽','🥕','🧄','🥔','🍠',
+  '🍞','🥖','🧀','🍳','🥚','🥓','🍗','🍖','🥩','🍱',
+  '🍚','🍜','🍝','🍕','🍔','🍟','🥪','🌮','🍣','🥘',
+  '🍲','🍦','🍰','🎂','🍮','🍬','🍫','🍪','🍩','🍯',
+  '🥜','🌰',
+  // 健康
+  '💪','🏃','🧘','🏋️','🚴','🏊','🤸','🧗','🚶','🩺',
+  '💊','🧴','😴','🛏️','🪥','🧹',
+  // 学习
+  '📚','📖','✍️','📝','💻','📋','📊','📈','✏️','🖊️','🎨',
+  // 生活
+  '🌟','⭐','☀️','🌙','🔥','❤️','🎯','🎮','🎵','🎸',
+  '🎹','🎤','🧩','🎲','🌱','🌸','🌺','🌻','🍀','🌿',
+  '🌳','💰','📱','🔑','✂️'
+];
+
+let state = {
+  categories: [],
+  records: {}  // { "2026-08-10": ["item_id1", "item_id2"] }
+};
+
+let currentDate = new Date();
+let currentPeriod = 'week';
+let selectedIcon = ICONS[0];
+let calMonth = new Date();
+let calendarOpen = false;
+
+function loadData() {
+  const saved = localStorage.getItem(getStorageKey());
+  if (saved) {
+    try {
+      state = JSON.parse(saved);
+      if (!state.categories) state.categories = [];
+      if (!state.records) state.records = {};
+    } catch(e) {
+      // Corrupted local cache: start empty, let cloud sync decide (cloud-first)
+      console.error('Failed to load data', e);
+      state = { categories: [], records: {} };
+    }
+  } else {
+    // No local cache (new device / after sign-out): start empty,
+    // DO NOT load defaults yet — cloud sync will pull real data first.
+    state = { categories: [], records: {} };
+  }
+}
+
+function loadDefaultData() {
+  state = {
+    categories: [
+      {
+        id: genId('cat'),
+        name: '健康',
+        icon: '💪',
+        archived: false,
+        countInStats: true,
+        items: [
+          { id: genId('item'), name: '喝水8杯', archived: false },
+          { id: genId('item'), name: '运动30分钟', archived: false },
+          { id: genId('item'), name: '早睡早起', archived: false }
+        ]
+      },
+      {
+        id: genId('cat'),
+        name: '学习',
+        icon: '📚',
+        archived: false,
+        countInStats: true,
+        items: [
+          { id: genId('item'), name: '阅读30分钟', archived: false },
+          { id: genId('item'), name: '背单词20个', archived: false },
+          { id: genId('item'), name: '编程练习', archived: false }
+        ]
+      },
+      {
+        id: genId('cat'),
+        name: '生活',
+        icon: '🌟',
+        archived: false,
+        countInStats: true,
+        items: [
+          { id: genId('item'), name: '冥想10分钟', archived: false },
+          { id: genId('item'), name: '写日记', archived: false }
+        ]
+      }
+    ],
+    records: {}
+  };
+  saveData();
+}
+
+function saveData() {
+  state._updated_at = new Date().toISOString();
+  localStorage.setItem(getStorageKey(), JSON.stringify(state));
+  scheduleCloudPush();
+}
+
+// ===== Supabase Config =====
+const SUPABASE_URL = 'https://rmqyyfoncddnfcaqiude.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_tkJEszfUG7UXJxjvRPiuIw_QjpjJ2Ay';
+const AUTH_SESSION_KEY = 'checkin_session';
+const AUTH_USER_KEY = 'checkin_user';
+
+let currentUser = null; // { id, email, token }
+let syncTimer = null;
+let pushDebounceTimer = null;
+let isSyncing = false;
+let lastSyncTime = 0;
+let authMode = 'login'; // 'login' or 'register'
+
+// ===== Password Hashing (Web Crypto API) =====
+async function hashPassword(password, salt) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(salt + password);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function generateSalt() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function generateToken() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ===== Auth (Custom app_users table) =====
+function getAuthSession() {
+  return localStorage.getItem(AUTH_SESSION_KEY);
+}
+
+function getAuthUser() {
+  const saved = localStorage.getItem(AUTH_USER_KEY);
+  if (saved) {
+    try { return JSON.parse(saved); } catch(e) { return null; }
+  }
+  return null;
+}
+
+function setAuthSession(user) {
+  localStorage.setItem(AUTH_SESSION_KEY, user.token);
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  currentUser = user;
+}
+
+function clearAuthSession() {
+  localStorage.removeItem(AUTH_SESSION_KEY);
+  localStorage.removeItem(AUTH_USER_KEY);
+  currentUser = null;
+}
+
+function switchAuthMode(mode) {
+  authMode = mode;
+  const btn = document.getElementById('authBtn');
+  const subtitle = document.getElementById('authSubtitle');
+  const toggle = document.getElementById('authToggle');
+  const icon = document.getElementById('authIcon');
+  const errEl = document.getElementById('authError');
+  errEl.textContent = '';
+
+  if (mode === 'register') {
+    icon.textContent = '\u{1F4DD}';
+    subtitle.textContent = '创建新账号';
+    btn.textContent = '注册';
+    toggle.innerHTML = '已有账号？<a onclick="switchAuthMode(\'login\')">去登录</a>';
+  } else {
+    icon.textContent = '\u{1F510}';
+    subtitle.textContent = '登录你的账号';
+    btn.textContent = '登录';
+    toggle.innerHTML = '还没有账号？<a onclick="switchAuthMode(\'register\')">注册新账号</a>';
+  }
+  document.getElementById('authEmail').focus();
+}
+
+async function handleAuth() {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value.trim();
+  const errEl = document.getElementById('authError');
+  const btn = document.getElementById('authBtn');
+
+  if (!email || !password) {
+    errEl.textContent = '请填写邮箱和密码';
+    return;
+  }
+  if (password.length < 6) {
+    errEl.textContent = '密码至少需要6位';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = authMode === 'register' ? '注册中...' : '登录中...';
+  errEl.textContent = '';
+
+  try {
+    const headers = {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json'
+    };
+
+    if (authMode === 'register') {
+      // Check if email already exists
+      const checkUrl = `${SUPABASE_URL}/rest/v1/app_users?email=eq.${encodeURIComponent(email)}&select=id`;
+      const checkRes = await fetch(checkUrl, { headers });
+      const checkRows = await checkRes.json();
+      if (checkRows && checkRows.length > 0) {
+        throw new Error('该邮箱已被注册');
+      }
+
+      // Hash password and insert
+      const salt = generateSalt();
+      const passwordHash = await hashPassword(password, salt);
+      const token = generateToken();
+
+      const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/app_users`, {
+        method: 'POST',
+        headers: { ...headers, 'Prefer': 'return=representation' },
+        body: JSON.stringify({
+          email: email,
+          password_hash: passwordHash,
+          salt: salt,
+          session_token: token
+        })
+      });
+
+      if (!insertRes.ok) {
+        const errData = await insertRes.json();
+        throw new Error(errData.message || '注册失败');
+      }
+
+      const insertData = await insertRes.json();
+      const user = { id: insertData[0].id, email: email, token: token };
+      setAuthSession(user);
+      enterApp();
+
+    } else {
+      // Login: fetch user by email
+      const loginUrl = `${SUPABASE_URL}/rest/v1/app_users?email=eq.${encodeURIComponent(email)}&select=id,email,password_hash,salt,session_token`;
+      const loginRes = await fetch(loginUrl, { headers });
+      if (!loginRes.ok) throw new Error('登录失败，请重试');
+      const rows = await loginRes.json();
+
+      if (!rows || rows.length === 0) {
+        throw new Error('账号不存在，请先注册');
+      }
+
+      const userRow = rows[0];
+      const inputHash = await hashPassword(password, userRow.salt);
+
+      if (inputHash !== userRow.password_hash) {
+        throw new Error('密码错误');
+      }
+
+      // Generate new session token (invalidate old ones)
+      const newToken = generateToken();
+      const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/app_users?id=eq.${userRow.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ session_token: newToken })
+      });
+
+      if (!updateRes.ok) throw new Error('登录失败，请重试');
+
+      const user = { id: userRow.id, email: userRow.email, token: newToken };
+      setAuthSession(user);
+      enterApp();
+    }
+  } catch(e) {
+    errEl.textContent = e.message || '操作失败，请重试';
+    btn.disabled = false;
+    btn.textContent = authMode === 'register' ? '注册' : '登录';
+  }
+}
+
+async function signOutUser() {
+  if (!confirm('确定退出登录吗？')) return;
+  // Optionally clear session token on server
+  if (currentUser) {
+    const headers = {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json'
+    };
+    fetch(`${SUPABASE_URL}/rest/v1/app_users?id=eq.${currentUser.id}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ session_token: null })
+    }).catch(() => {});
+  }
+  clearAuthSession();
+  if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+  if (currentUser) localStorage.removeItem(`checkin_app_data_${currentUser.id}`);
+  state = { categories: [], records: {} };
+  document.getElementById('authOverlay').classList.remove('hidden');
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+  document.getElementById('authError').textContent = '';
+  switchAuthMode('login');
+}
+
+function enterApp() {
+  document.getElementById('authOverlay').classList.add('hidden');
+  const badge = document.getElementById('userBadge');
+  if (currentUser && currentUser.email) {
+    badge.textContent = currentUser.email;
+    badge.title = currentUser.email;
+  }
+  initApp();
+}
+
+// ===== Cloud Sync (user-isolated via session token) =====
+function updateSyncStatus(status, text) {
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncText');
+  const wrapper = document.getElementById('syncStatus');
+  if (!dot || !txt) return;
+  wrapper.style.display = 'flex';
+  dot.className = 'sync-dot ' + status;
+  txt.textContent = text;
+}
+
+function authHeaders() {
+  return {
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json'
+  };
+}
+
+async function fetchCloudData() {
+  if (!currentUser) return null;
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/checkin_data?user_key=eq.${encodeURIComponent(currentUser.id)}&select=data,updated_at`;
+    const res = await fetch(url, { headers: authHeaders() });
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return rows.length > 0 ? rows[0] : null;
+  } catch(e) {
+    console.error('Fetch cloud error:', e);
+    return null;
+  }
+}
+
+async function pushCloudData() {
+  if (!currentUser || isSyncing) return false;
+  isSyncing = true;
+  updateSyncStatus('syncing', '同步中...');
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/checkin_data?on_conflict=user_key`;
+    const payload = {
+      user_key: currentUser.id,
+      data: state,
+      updated_at: new Date().toISOString()
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Prefer': 'resolution=merge-duplicates' },
+      body: JSON.stringify(payload)
+    });
+    isSyncing = false;
+    if (res.ok) {
+      updateSyncStatus('online', '已同步');
+      lastSyncTime = Date.now();
+      return true;
+    } else {
+      updateSyncStatus('offline', '同步失败');
+      return false;
+    }
+  } catch(e) {
+    isSyncing = false;
+    updateSyncStatus('offline', '网络错误');
+    return false;
+  }
+}
+
+function scheduleCloudPush() {
+  if (!currentUser) return;
+  if (pushDebounceTimer) clearTimeout(pushDebounceTimer);
+  pushDebounceTimer = setTimeout(() => pushCloudData(), 1500);
+}
+
+async function syncFromCloud() {
+  if (!currentUser || isSyncing) return;
+  updateSyncStatus('syncing', '同步中...');
+  const cloudRow = await fetchCloudData();
+  if (!cloudRow) {
+    // No cloud data yet. If this device has no local cache either, it's a brand
+    // new user → seed default data (which also pushes to cloud). Otherwise push local.
+    if (!localStorage.getItem(getStorageKey())) {
+      loadDefaultData();
+    } else {
+      await pushCloudData();
+    }
+    return;
+  }
+
+  const cloudData = cloudRow.data;
+  const cloudTime = new Date(cloudRow.updated_at).getTime();
+  const localTime = state._updated_at ? new Date(state._updated_at).getTime() : 0;
+
+  if (cloudTime > localTime) {
+    state = cloudData;
+    if (!state.categories) state.categories = [];
+    if (!state.records) state.records = {};
+    localStorage.setItem(getStorageKey(), JSON.stringify(state));
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab) {
+      const tabName = activeTab.getAttribute('data-tab');
+      if (tabName === 'checkin') renderCheckin();
+      else if (tabName === 'stats') renderStats();
+      else if (tabName === 'manage') renderManage();
+    }
+    updateSyncStatus('online', '已同步');
+  } else if (localTime > cloudTime) {
+    await pushCloudData();
+  } else {
+    updateSyncStatus('online', '已同步');
+  }
+  lastSyncTime = Date.now();
+}
+
+function startPeriodicSync() {
+  if (syncTimer) clearInterval(syncTimer);
+  syncTimer = setInterval(() => {
+    if (currentUser && document.visibilityState === 'visible') {
+      syncFromCloud();
+    }
+  }, 30000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && currentUser) {
+      syncFromCloud();
+    }
+  });
+}
+
+function renderCloudStatus() {
+  const statusDisplay = document.getElementById('cloudStatusDisplay');
+  if (currentUser) {
+    statusDisplay.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+        <span class="cloud-status-badge enabled">✅ 已登录</span>
+        <button class="btn btn-danger" onclick="signOutUser()">退出登录</button>
+      </div>
+      <div style="font-size:13px; color:var(--text-muted);">
+        当前账号: <code>${escapeHtml(currentUser.email)}</code><br>
+        数据自动云端同步，多设备登录即可同步
+      </div>
+    `;
+    updateSyncStatus('online', '已同步');
+  } else {
+    statusDisplay.innerHTML = `<span class="cloud-status-badge disabled">未登录</span>`;
+  }
+}
+
+function genId(prefix) {
+  return prefix + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+}
+
+function formatDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseDate(str) {
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function isToday(date) {
+  return formatDate(date) === formatDate(new Date());
+}
+
+function getDayLabel(date) {
+  const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const target = new Date(date);
+  target.setHours(0,0,0,0);
+  const diff = Math.round((target - today) / 86400000);
+  if (diff === 0) return '今天';
+  if (diff === -1) return '昨天';
+  if (diff === 1) return '明天';
+  return days[date.getDay()];
+}
+
+// ===== Tab Switching =====
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  if (tab === 'checkin') renderCheckin();
+  if (tab === 'stats') renderStats();
+  if (tab === 'manage') { renderManage(); renderCloudStatus(); }
+}
+
+// ===== Checkin Tab =====
+// ---- Quant helpers ----
+function isQuantItem(item) {
+  return !!(item && item.quant && item.quant.unit != null && item.quant.target != null);
+}
+// Normalize a record entry -> { id, value, note } ; plain string treated as value=1 (checked)
+function getRecordObj(rec) {
+  if (typeof rec === 'object' && rec !== null) {
+    return {
+      id: rec.id,
+      value: rec.value != null ? Number(rec.value) || 0 : 0,
+      note: rec.note != null ? String(rec.note) : ''
+    };
+  }
+  return { id: rec, value: 1, note: '' };
+}
+function getDayRecords(dateKey) {
+  return (state.records[dateKey] || []).map(getRecordObj);
+}
+// Has a check-in record at all.
+// A quant record counts as "checked-in" when a non-zero value was recorded;
+// a zero value (incl. note-only records) means not checked-in.
+// Negative values ARE treated as a real check-in.
+function isChecked(rec) {
+  return rec.value !== 0;
+}
+// Quant target met? 'gte' (>=, default) or 'lte' (<=)
+function isQuantDone(rec, item) {
+  const cmp = (item.quant && item.quant.compare) || 'gte';
+  return cmp === 'lte' ? rec.value <= item.quant.target : rec.value >= item.quant.target;
+}
+// "Done" = checked AND reached target for quant items
+function isDone(rec, item) {
+  if (!isChecked(rec)) return false;
+  if (isQuantItem(item)) return isQuantDone(rec, item);
+  return true;
+}
+function getItemById(itemId) {
+  for (const c of state.categories) {
+    const it = c.items.find(i => i.id === itemId);
+    if (it) return it;
+  }
+  return null;
+}
+function getItemCat(itemId) {
+  return state.categories.find(c => c.items.some(i => i.id === itemId));
+}
+// Category participates in overall stats (countInStats defaults to true)
+function isCatCounted(cat) {
+  return cat.countInStats !== false;
+}
+function getDayCheckedIds(dateKey) {
+  return getDayRecords(dateKey).filter(isChecked).map(r => r.id);
+}
+function getDayDoneIds(dateKey) {
+  return getDayRecords(dateKey).filter(r => {
+    const item = getItemById(r.id);
+    return item && isDone(r, item);
+  }).map(r => r.id);
+}
+
+function setNote(itemId, note) {
+  const dateKey = formatDate(currentDate);
+  const item = getItemById(itemId);
+  if (!item) return;
+  if (!state.records[dateKey]) state.records[dateKey] = [];
+  const list = state.records[dateKey];
+  const idx = list.findIndex(r => getRecordObj(r).id === itemId);
+  const cur = idx > -1 ? getRecordObj(list[idx]) : { id: itemId, value: 0, note: '' };
+  const newNote = note.trim();
+  if (newNote) {
+    const entry = { id: itemId, value: cur.value, note: newNote };
+    if (idx > -1) list[idx] = entry; else list.push(entry);
+  } else if (idx > -1) {
+    // Remove note: keep the check-in record if a non-zero value exists (incl. negatives)
+    if (cur.value !== 0) list[idx] = { id: itemId, value: cur.value };
+    else list.splice(idx, 1);
+  }
+  if (list.length === 0) delete state.records[dateKey];
+  saveData();
+  renderCheckin();
+}
+
+function changeDate(delta) {
+  currentDate.setDate(currentDate.getDate() + delta);
+  renderCheckin();
+}
+
+function goToday() {
+  currentDate = new Date();
+  calMonth = new Date();
+  renderCheckin();
+}
+
+// ===== Calendar =====
+function toggleCalendar() {
+  calendarOpen = !calendarOpen;
+  const wrap = document.getElementById('calendarWrap');
+  const btn = document.getElementById('calToggleBtn');
+  if (calendarOpen) {
+    calMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    renderCalendar();
+    wrap.style.display = 'block';
+    btn.style.background = 'var(--primary-light)';
+  } else {
+    wrap.style.display = 'none';
+    btn.style.background = '';
+  }
+}
+
+function changeCalMonth(delta) {
+  calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + delta, 1);
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const label = document.getElementById('calMonthLabel');
+  label.textContent = `${calMonth.getFullYear()}年${calMonth.getMonth() + 1}月`;
+
+  const grid = document.getElementById('calendarGrid');
+  const year = calMonth.getFullYear(), month = calMonth.getMonth();
+  const firstDow = new Date(year, month, 1).getDay() || 7; // Mon=1..Sun=7
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayKey = formatDate(new Date());
+  const curKey = formatDate(currentDate);
+
+  let html = ['周一','周二','周三','周四','周五','周六','周日'].map(w =>
+    `<div class="cal-weekday">${w}</div>`).join('');
+
+  // Leading blanks from previous month
+  for (let i = 1; i < firstDow; i++) {
+    const d = new Date(year, month, i - firstDow + 1);
+    const key = formatDate(d);
+    const cnt = getDayRecords(key).filter(isChecked).length;
+    html += `<div class="cal-day other" onclick="selectCalDate('${key}')">
+      ${d.getDate()}<div class="cal-count ${cnt === 0 ? 'zero' : ''}">${cnt}</div>
+    </div>`;
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const cnt = getDayRecords(key).filter(isChecked).length;
+    const cls = ['cal-day'];
+    if (key === todayKey) cls.push('today');
+    if (key === curKey) cls.push('selected');
+    html += `<div class="${cls.join(' ')}" onclick="selectCalDate('${key}')">
+      ${day}<div class="cal-count ${cnt === 0 ? 'zero' : ''}">${cnt}</div>
+    </div>`;
+  }
+
+  grid.innerHTML = html;
+}
+
+function selectCalDate(dateKey) {
+  currentDate = parseDate(dateKey);
+  // Keep calendar open; user closes it by clicking the 📅 button again
+  calMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  renderCalendar();
+  renderCheckin();
+}
+
+function toggleCheckin(itemId) {
+  const dateKey = formatDate(currentDate);
+  const item = getItemById(itemId);
+  if (isQuantItem(item)) {
+    // Quant items open the value input instead
+    openQuantInput(itemId);
+    return;
+  }
+  if (!state.records[dateKey]) state.records[dateKey] = [];
+  const idx = state.records[dateKey].findIndex(r => getRecordObj(r).id === itemId);
+  if (idx > -1) {
+    state.records[dateKey].splice(idx, 1);
+    if (state.records[dateKey].length === 0) delete state.records[dateKey];
+  } else {
+    state.records[dateKey].push(itemId);
+  }
+  saveData();
+  renderCheckin();
+}
+
+function setQuantValue(itemId, value) {
+  const dateKey = formatDate(currentDate);
+  const num = Number(value);
+  if (!state.records[dateKey]) state.records[dateKey] = [];
+  const list = state.records[dateKey];
+  const idx = list.findIndex(r => getRecordObj(r).id === itemId);
+  const cur = idx > -1 ? getRecordObj(list[idx]) : { id: itemId, value: 0, note: '' };
+  if (num !== 0) {
+    // Store any non-zero value, including negatives (e.g. weight, profit/loss).
+    const entry = { id: itemId, value: num, note: cur.note };
+    if (idx > -1) list[idx] = entry; else list.push(entry);
+  } else if (idx > -1) {
+    list.splice(idx, 1); // value 0 -> remove (clears check-in)
+  }
+  if (list.length === 0) delete state.records[dateKey];
+  saveData();
+  renderCheckin();
+}
+
+function getStreak(itemId) {
+  let streak = 0;
+  const d = new Date();
+  // If today not checked, start from yesterday
+  const todayKey = formatDate(d);
+  if (!getDayCheckedIds(todayKey).includes(itemId)) {
+    d.setDate(d.getDate() - 1);
+  }
+  while (true) {
+    const key = formatDate(d);
+    if (getDayCheckedIds(key).includes(itemId)) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+function renderCheckin() {
+  // Date bar
+  document.getElementById('dayLabel').textContent = getDayLabel(currentDate);
+  document.getElementById('dateValue').textContent =
+    `${currentDate.getMonth() + 1}月${currentDate.getDate()}日`;
+  document.getElementById('todayBtn').disabled = isToday(currentDate);
+
+  // Progress (done = checked for plain items, reached target for quant items)
+  // Only categories with countInStats participate in the progress total
+  const allItems = state.categories
+    .filter(c => !c.archived && isCatCounted(c))
+    .flatMap(c => c.items.filter(i => !i.archived));
+  const total = allItems.length;
+  const dateKey = formatDate(currentDate);
+  const doneIds = getDayDoneIds(dateKey);
+  const done = doneIds.filter(id => allItems.some(i => i.id === id)).length;
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+
+  document.getElementById('progressCount').innerHTML =
+    `<span class="done">${done}</span> / ${total}  (${pct}%)`;
+  document.getElementById('progressBar').style.width = pct + '%';
+
+  // List
+  const list = document.getElementById('checkinList');
+  const activeCats = state.categories.filter(c => !c.archived && (!c.startDate || dateKey >= c.startDate));
+  if (activeCats.length === 0 || activeCats.every(c => c.items.filter(i => !i.archived).length === 0)) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">📝</div><div class="text">还没有分类，去「分类管理」添加吧</div></div>`;
+    return;
+  }
+
+  const dayRecs = getDayRecords(dateKey);
+  let html = '';
+
+  activeCats.forEach(cat => {
+    const activeItems = cat.items.filter(i => !i.archived);
+    if (activeItems.length === 0) return;
+    const catDone = activeItems.filter(i => doneIds.includes(i.id)).length;
+    const notCounted = !isCatCounted(cat);
+    html += `<div class="category-card">
+      <div class="category-header">
+        <span class="category-name">${escapeHtml(cat.name)}${notCounted ? ' <span class="nocount-tag">不计统计</span>' : ''}</span>
+        <span class="category-count">${catDone}/${activeItems.length}</span>
+      </div>`;
+
+    activeItems.forEach(item => {
+      const rec = dayRecs.find(r => r.id === item.id);
+      const isCheckedNow = rec ? isChecked(rec) : false;
+      const isDoneNow = rec ? isDone(rec, item) : false;
+      const streak = getStreak(item.id);
+      const hasNote = !!(rec && rec.note);
+      const noteTip = hasNote ? escapeHtml(rec.note).replace(/"/g, '&quot;') : '添加备注';
+      // note text shown inline next to name (small font), 💬 always at far right
+      const noteText = hasNote ? `<span class="checkin-note" title="${noteTip}">${escapeHtml(rec.note)}</span>` : '';
+      const noteBtn = `<span class="note-btn ${hasNote ? 'has' : ''}" title="${noteTip}" onclick="event.stopPropagation(); openNoteModal('${item.id}')">💬</span>`;
+      if (isQuantItem(item)) {
+        const val = rec ? rec.value : 0;
+        const target = item.quant.target;
+        const unit = item.quant.unit;
+        const cmpSym = ((item.quant.compare) || 'gte') === 'lte' ? '≤' : '≥';
+        const doneClass = isDoneNow ? 'done' : (isCheckedNow ? 'partial' : '');
+        html += `<div class="checkin-item ${isCheckedNow ? 'checked' : ''} ${doneClass}" onclick="openQuantInput('${item.id}')">
+          <div class="checkin-checkbox">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <span class="checkin-item-name">${escapeHtml(item.name)}</span>
+          ${noteText}
+          <div class="checkin-right">
+            <span class="quant-badge ${isDoneNow ? 'ok' : (isCheckedNow ? 'low' : '')}">${val} ${cmpSym} ${target} ${escapeHtml(unit)}</span>
+            ${streak >= 2 ? `<span class="checkin-streak">🔥 ${streak}天</span>` : ''}
+            ${noteBtn}
+          </div>
+        </div>`;
+      } else {
+        html += `<div class="checkin-item ${isCheckedNow ? 'checked' : ''}" onclick="toggleCheckin('${item.id}')">
+          <div class="checkin-checkbox">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <span class="checkin-item-name">${escapeHtml(item.name)}</span>
+          ${noteText}
+          <div class="checkin-right">
+            ${streak >= 2 ? `<span class="checkin-streak">🔥 ${streak}天</span>` : ''}
+            ${noteBtn}
+          </div>
+        </div>`;
+      }
+    });
+    html += `</div>`;
+  });
+
+  list.innerHTML = html;
+}
+
+// ===== Stats Tab =====
+let statsOffset = 0; // 0 = current period, -1 prev, +1 next
+
+function switchPeriod(period) {
+  currentPeriod = period;
+  statsOffset = 0;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.period-btn[data-period="${period}"]`).classList.add('active');
+  renderStats();
+}
+
+function changeStatsOffset(delta) {
+  statsOffset += delta;
+  renderStats();
+}
+
+function resetStatsOffset() {
+  statsOffset = 0;
+  renderStats();
+}
+
+function getPeriodRange(period, offset) {
+  offset = offset || 0;
+  const now = new Date();
+  let start, end, totalDays, label;
+  if (period === 'week') {
+    start = new Date(now);
+    const day = now.getDay() || 7; // Mon=1..Sun=7
+    start.setDate(now.getDate() - day + 1 + offset * 7);
+    start.setHours(0,0,0,0);
+    end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    totalDays = 7;
+    label = `${start.getMonth()+1}/${start.getDate()} - ${end.getMonth()+1}/${end.getDate()}`;
+  } else if (period === 'month') {
+    start = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    end = new Date(now.getFullYear(), now.getMonth() + 1 + offset, 0);
+    totalDays = end.getDate();
+    label = `${start.getFullYear()}年${start.getMonth()+1}月`;
+  } else {
+    const y = now.getFullYear() + offset;
+    start = new Date(y, 0, 1);
+    end = new Date(y, 11, 31);
+    totalDays = isLeapYear(y) ? 366 : 365;
+    label = `${y}年`;
+  }
+  return { start, end, totalDays, label };
+}
+
+function isLeapYear(y) {
+  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+function countInRange(itemId, start, end) {
+  let count = 0;
+  const d = new Date(start);
+  while (d <= end) {
+    const key = formatDate(d);
+    if (getDayCheckedIds(key).includes(itemId)) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
+
+// Days in range where the item reached its quant target (plain items count as checked)
+function countDoneInRange(item, start, end) {
+  let count = 0;
+  const d = new Date(start);
+  while (d <= end) {
+    const key = formatDate(d);
+    const rec = getDayRecords(key).find(r => r.id === item.id);
+    if (rec && isDone(rec, item)) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
+
+// Sum of quant values in range (plain items count 1 per check-in)
+function sumValueInRange(item, start, end) {
+  let sum = 0;
+  const d = new Date(start);
+  while (d <= end) {
+    const key = formatDate(d);
+    const rec = getDayRecords(key).find(r => r.id === item.id);
+    if (rec && isChecked(rec)) sum += isQuantItem(item) ? rec.value : 1;
+    d.setDate(d.getDate() + 1);
+  }
+  return sum;
+}
+
+// Daily quant values in range -> [{date, value}] for trend chart
+function dailyValuesInRange(item, start, end) {
+  const days = [];
+  const d = new Date(start);
+  while (d <= end) {
+    const key = formatDate(d);
+    const rec = getDayRecords(key).find(r => r.id === item.id);
+    days.push({ key, value: rec && isChecked(rec) ? rec.value : 0 });
+    d.setDate(d.getDate() + 1);
+  }
+  return days;
+}
+
+// SVG line chart (no external deps); supports negative values and compare direction
+function renderTrendSvg(item, days) {
+  const W = 300, H = 64, padL = 30, padB = 14, padT = 8, padR = 8;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const target = item.quant.target;
+  const cmp = (item.quant && item.quant.compare) || 'gte';
+  const vals = days.map(d => d.value);
+  // Include 0 as a baseline so positive-only charts keep a zero axis;
+  // negative values extend the axis downward.
+  let maxV = Math.max(target, ...vals, 0);
+  let minV = Math.min(target, ...vals, 0);
+  const span = (maxV - minV) || 1;
+  const pad = span * 0.15;
+  maxV += pad; minV -= pad;
+  const range = (maxV - minV) || 1;
+  const n = days.length;
+  const x = i => padL + (n === 1 ? plotW / 2 : i * plotW / (n - 1));
+  const y = v => padT + plotH - ((v - minV) / range) * plotH;
+
+  let path = '';
+  days.forEach((d, i) => {
+    const px = x(i).toFixed(1), py = y(d.value).toFixed(1);
+    path += (i === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`);
+  });
+
+  const ty = y(target).toFixed(1);
+  const tyNum = Number(ty);
+  const hitFn = cmp === 'lte' ? (v => v <= target) : (v => v >= target);
+  const dots = days.map((d, i) => {
+    const px = x(i).toFixed(1), py = y(d.value).toFixed(1);
+    const hit = hitFn(d.value);
+    return `<circle cx="${px}" cy="${py}" r="2.8" fill="${hit ? '#059669' : '#d97706'}" stroke="#fff" stroke-width="1"/>`;
+  }).join('');
+
+  const sym = cmp === 'lte' ? '≤' : '≥';
+  const textY = (tyNum - 4) < (padT + 6) ? (tyNum + 10) : (tyNum - 4);
+  return `<svg class="trend-svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">
+    <line x1="${padL}" y1="${ty}" x2="${W - padR}" y2="${ty}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4 3" opacity="0.75"/>
+    <path d="${path}" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    ${dots}
+    <text x="${W - padR}" y="${textY}" text-anchor="end" font-size="9" fill="#dc2626" opacity="0.8">目标 ${sym} ${target}</text>
+  </svg>`;
+}
+
+function renderStats() {
+  const { start, end, totalDays, label } = getPeriodRange(currentPeriod, statsOffset);
+
+  // Update period nav label (‹ range ›); badge marks current period only
+  const navLabel = document.getElementById('statsPeriodLabel');
+  if (navLabel) {
+    const periodName = currentPeriod === 'week' ? '周' : (currentPeriod === 'month' ? '月' : '年');
+    const badge = statsOffset === 0 ? `<span class="nav-badge">本${periodName}</span>` : '';
+    navLabel.innerHTML = badge + label;
+    navLabel.title = statsOffset === 0 ? `当前${periodName}，点击无变化` : `点击回到当前${periodName}`;
+  }
+
+  // Summary only counts categories with countInStats enabled
+  const statsItems = state.categories
+    .filter(c => isCatCounted(c))
+    .flatMap(c => c.items);
+  const total = statsItems.length;
+
+  // Summary
+  let totalCheckins = 0;
+  let activeDays = new Set();
+  statsItems.forEach(item => {
+    const d = new Date(start);
+    while (d <= end) {
+      const key = formatDate(d);
+      if (getDayCheckedIds(key).includes(item.id)) {
+        totalCheckins++;
+        activeDays.add(key);
+      }
+      d.setDate(d.getDate() + 1);
+    }
+  });
+
+  const avgPerDay = totalCheckins / totalDays;
+  const completionRate = total > 0 ? Math.round(totalCheckins / (total * totalDays) * 100) : 0;
+
+  document.getElementById('statsSummary').innerHTML = `
+    <div class="stats-summary-card">
+      <div class="stats-summary-value">${totalCheckins}</div>
+      <div class="stats-summary-label">总打卡次数</div>
+    </div>
+    <div class="stats-summary-card">
+      <div class="stats-summary-value">${activeDays.size}</div>
+      <div class="stats-summary-label">活跃天数</div>
+    </div>
+    <div class="stats-summary-card">
+      <div class="stats-summary-value">${completionRate}%</div>
+      <div class="stats-summary-label">完成率</div>
+    </div>
+  `;
+
+  // Detailed list
+  const list = document.getElementById('statsList');
+  if (state.categories.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">📊</div><div class="text">还没有打卡数据</div></div>`;
+    return;
+  }
+
+  let html = `<div style="text-align:center; font-size:13px; color:var(--text-muted); margin-bottom:14px;">${label} · 共${totalDays}天</div>`;
+
+  // Color palette for bars
+  const colors = ['#4f46e5', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
+
+  state.categories.forEach((cat, catIdx) => {
+    if (cat.items.length === 0) return;
+    // Hide non-counted categories from the stats page entirely
+    if (!isCatCounted(cat)) return;
+    // Hide categories whose start date is after the period end (not yet active)
+    const endKey = formatDate(end);
+    if (cat.startDate && endKey < cat.startDate) return;
+    const color = colors[catIdx % colors.length];
+    const catArchived = cat.archived;
+
+    html += `<div class="stats-category-card${catArchived ? ' archived' : ''}">
+      <div class="category-header">
+        <span class="category-name">${escapeHtml(cat.name)}${catArchived ? ' <span class="archived-tag">已归档</span>' : ''}</span>
+      </div>`;
+
+    cat.items.forEach(item => {
+      const count = countInRange(item.id, start, end);
+      const pct = totalDays > 0 ? Math.round(count / totalDays * 100) : 0;
+      const streak = getStreak(item.id);
+      const totalCount = getTotalCount(item.id);
+      const itemArchived = catArchived || item.archived;
+
+      if (isQuantItem(item)) {
+        // ---- Quant item: unified row + value totals + trend chart ----
+        const isLte = (item.quant.compare || 'gte') === 'lte';
+        const doneDays = countDoneInRange(item, start, end);
+        const sumVal = sumValueInRange(item, start, end);
+        const planVal = item.quant.target * totalDays;
+        const unit = item.quant.unit;
+        const daily = dailyValuesInRange(item, start, end);
+        // gte: 累积完成值 / 计划值; lte: 达标天数占比
+        const rateVal = isLte
+          ? Math.round(doneDays / totalDays * 100)
+          : Math.round(sumVal / Math.max(planVal, 1) * 100);
+
+        html += `<div class="stats-item-row quant-row${itemArchived ? ' archived' : ''}">
+          <div class="stats-item-header">
+            <span class="stats-item-name">${escapeHtml(item.name)}${item.archived && !catArchived ? ' <span class="archived-tag">已归档</span>' : ''}<span class="quant-target-tag">🎯 ${isLte ? '≤' : '≥'}${item.quant.target}${escapeHtml(unit)}/天</span></span>
+            <span class="stats-item-freq">
+              <span class="current">${doneDays}</span><span class="total">/${totalDays}天</span>
+            </span>
+          </div>
+          <div class="stats-item-bar">
+            <div class="stats-item-bar-fill" style="width:${Math.min(100, rateVal)}%; background:${color};"></div>
+          </div>
+          ${renderTrendSvg(item, daily)}
+          <div class="stats-item-meta">
+            <span>${isLte ? '达标率' : '完成率'} ${rateVal}%</span>
+            <span class="quant-sum">${isLte ? `合计 ${sumVal}` : `总完成 ${sumVal}/${planVal}`} ${escapeHtml(unit)}</span>
+            <span>🔥 连续${streak}天 · 累计${totalCount}次</span>
+          </div>
+        </div>`;
+      } else {
+        html += `<div class="stats-item-row${itemArchived ? ' archived' : ''}">
+          <div class="stats-item-header">
+            <span class="stats-item-name">${escapeHtml(item.name)}${item.archived && !catArchived ? ' <span class="archived-tag">已归档</span>' : ''}</span>
+            <span class="stats-item-freq">
+              <span class="current">${count}</span><span class="total">/${totalDays}</span>
+            </span>
+          </div>
+          <div class="stats-item-bar">
+            <div class="stats-item-bar-fill" style="width:${pct}%; background:${color};"></div>
+          </div>
+          <div class="stats-item-meta">
+            <span>完成率 ${pct}%</span>
+            <span>🔥 连续${streak}天 · 累计${totalCount}次</span>
+          </div>
+        </div>`;
+      }
+    });
+    html += `</div>`;
+  });
+
+  list.innerHTML = html;
+}
+
+function getTotalCount(itemId) {
+  let count = 0;
+  Object.keys(state.records).forEach(key => {
+    if (getDayCheckedIds(key).includes(itemId)) count++;
+  });
+  return count;
+}
+
+// ===== Generic Edit Modal =====
+let editModalState = null;
+
+function openEditModal(title, sub, bodyHtml, state, okLabel) {
+  document.getElementById('editModalTitle').textContent = title;
+  document.getElementById('editModalSub').textContent = sub || '';
+  document.getElementById('editModalBody').innerHTML = bodyHtml;
+  document.getElementById('editModalOk').textContent = okLabel || '确定';
+  editModalState = state;
+  document.getElementById('editModal').classList.add('show');
+  const first = document.querySelector('#editModalBody input');
+  if (first) setTimeout(() => first.focus(), 50);
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('show');
+  editModalState = null;
+}
+
+function toggleQuantFields() {
+  const on = document.getElementById('modalQuantOn').checked;
+  document.getElementById('quantFields').style.display = on ? 'block' : 'none';
+}
+
+function confirmEditModal() {
+  const s = editModalState;
+  if (!s) return;
+  if (s.type === 'editCat') {
+    const v = document.getElementById('modalInput1').value.trim();
+    if (!v) { showToast('请输入名称'); return; }
+    const cat = state.categories.find(c => c.id === s.catId);
+    if (cat) {
+      cat.name = v;
+      saveData();
+      renderManage();
+      showToast('分类名称已修改');
+    }
+  } else if (s.type === 'editItem') {
+    const v = document.getElementById('modalInput1').value.trim();
+    if (!v) { showToast('请输入名称'); return; }
+      const cat = state.categories.find(c => c.id === s.catId);
+      const item = cat && cat.items.find(i => i.id === s.itemId);
+      if (item) {
+        item.name = v;
+        const quantOn = document.getElementById('modalQuantOn').checked;
+        if (quantOn) {
+          const unit = document.getElementById('modalUnit').value.trim();
+          const target = parseFloat(document.getElementById('modalTarget').value);
+          const compare = document.getElementById('modalCompare').value || 'gte';
+          if (!unit) { showToast('请输入量化单位'); return; }
+          if (isNaN(target)) { showToast('请输入有效的目标数值'); return; }
+          item.quant = { unit: unit, target: target, compare: compare };
+        } else {
+          delete item.quant;
+        }
+        saveData();
+        renderManage();
+        showToast('打卡项已修改');
+      }
+  } else if (s.type === 'quantInput') {
+    const input = document.getElementById('modalQuantValue');
+    const raw = input.value.trim();
+    const num = raw === '' ? 0 : parseFloat(raw);
+    if (isNaN(num)) { showToast('请输入有效数值'); return; }
+    setQuantValue(s.itemId, num);
+    showToast(num !== 0 ? '已记录' : '已取消打卡');
+  } else if (s.type === 'note') {
+    const note = document.getElementById('modalNote').value;
+    setNote(s.itemId, note);
+    showToast(note.trim() ? '备注已保存' : '备注已清除');
+  } else if (s.type === 'setStartDate') {
+    const date = document.getElementById('modalStartDate').value;
+    const cat = state.categories.find(c => c.id === s.catId);
+    if (cat) {
+      cat.startDate = date || undefined;
+      saveData();
+      renderManage();
+      showToast(date ? `开始日期设为 ${date}` : '已清除开始日期（立即生效）');
+    }
+  }
+  closeEditModal();
+}
+
+// ===== Manage Tab =====
+function renderManage() {
+  // Category list
+  const list = document.getElementById('manageList');
+  if (state.categories.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">📁</div><div class="text">还没有分类</div></div>`;
+    return;
+  }
+
+  const activeCats = state.categories.filter(c => !c.archived);
+  const archivedCats = state.categories.filter(c => c.archived);
+  let html = '';
+
+  // Active categories
+  activeCats.forEach(cat => {
+    const activeItems = cat.items.filter(i => !i.archived);
+    const archivedItems = cat.items.filter(i => i.archived);
+
+    const startDateTag = cat.startDate ? ` <span class="startdate-tag">📅 ${cat.startDate} 起</span>` : '';
+    html += `<div class="manage-category">
+      <div class="manage-category-header">
+        <span class="name">${escapeHtml(cat.name)}${!isCatCounted(cat) ? ' <span class="nocount-tag">不计统计</span>' : ''}${startDateTag}</span>
+        <button class="action-trigger" onclick="event.stopPropagation(); toggleCatMenu('${cat.id}')" title="更多操作" aria-label="更多操作">⋮</button>
+        <div class="action-menu" id="catMenu_${cat.id}">
+          <div class="action-menu-item" onclick="event.stopPropagation(); toggleCountInStats('${cat.id}')">
+            <span><span class="menu-icon">📊</span>纳入统计</span>
+            <span class="switch-track ${isCatCounted(cat) ? 'on' : ''}"><span class="switch-knob"></span></span>
+          </div>
+          <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); moveCategory('${cat.id}', -1)">
+            <span><span class="menu-icon">⬆️</span>上移</span>
+          </div>
+          <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); moveCategory('${cat.id}', 1)">
+            <span><span class="menu-icon">⬇️</span>下移</span>
+          </div>
+          <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); editCategoryName('${cat.id}')">
+            <span><span class="menu-icon">✏️</span>编辑名称</span>
+          </div>
+          <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); setCategoryStartDate('${cat.id}')">
+            <span><span class="menu-icon">📅</span>开始日期${cat.startDate ? '：' + cat.startDate : ''}</span>
+          </div>
+          <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); archiveCategory('${cat.id}')">
+            <span><span class="menu-icon">📦</span>归档分类</span>
+          </div>
+          <div class="action-menu-item danger" onclick="event.stopPropagation(); closeAllMenus(); permanentDeleteCategory('${cat.id}')">
+            <span><span class="menu-icon">🗑️</span>删除分类</span>
+          </div>
+        </div>
+      </div>`;
+
+    activeItems.forEach(item => {
+      html += `<div class="manage-item-row">
+        <span class="name">${escapeHtml(item.name)}${isQuantItem(item) ? ` <span class="quant-mini">🎯 ${item.quant.target} ${escapeHtml(item.quant.unit)}/天</span>` : ''}</span>
+        <button class="action-trigger" onclick="event.stopPropagation(); toggleItemMenu('${item.id}')" title="更多操作" aria-label="更多操作">⋮</button>
+        <div class="action-menu" id="itemMenu_${item.id}">
+          <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); editItemConfig('${cat.id}', '${item.id}')">
+            <span><span class="menu-icon">✏️</span>编辑</span>
+          </div>
+          <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); archiveItem('${cat.id}', '${item.id}')">
+            <span><span class="menu-icon">📦</span>归档</span>
+          </div>
+          <div class="action-menu-item danger" onclick="event.stopPropagation(); closeAllMenus(); permanentDeleteItem('${cat.id}', '${item.id}')">
+            <span><span class="menu-icon">🗑️</span>删除</span>
+          </div>
+        </div>
+      </div>`;
+    });
+
+    html += `<div class="manage-add-item">
+      <input type="text" placeholder="添加打卡项..." maxlength="30"
+        onkeydown="if(event.key==='Enter') addItem('${cat.id}', this)"
+        id="addItem_${cat.id}">
+      <button class="btn btn-primary" onclick="addItem('${cat.id}', document.getElementById('addItem_${cat.id}'))">添加</button>
+    </div>`;
+
+    // Archived items under this active category
+    if (archivedItems.length > 0) {
+      html += `<div class="archived-section">
+        <div class="archived-section-title">已归档打卡项</div>`;
+      archivedItems.forEach(item => {
+        html += `<div class="manage-item-row archived">
+          <span class="name">${escapeHtml(item.name)} <span class="archived-tag">已归档</span></span>
+          <button class="btn btn-outline btn-sm" title="编辑" onclick="editItemConfig('${cat.id}', '${item.id}')">编辑</button>
+          <button class="btn btn-success" onclick="restoreItem('${cat.id}', '${item.id}')">恢复</button>
+          <button class="btn btn-danger" onclick="permanentDeleteItem('${cat.id}', '${item.id}')">彻底删除</button>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+  });
+
+  // Archived categories
+  if (archivedCats.length > 0) {
+    html += `<div class="archived-categories">
+      <div class="archived-categories-title">📦 已归档分类</div>`;
+    archivedCats.forEach(cat => {
+      html += `<div class="manage-category archived">
+        <div class="manage-category-header">
+          <span class="name">${escapeHtml(cat.name)} <span class="archived-tag">已归档</span></span>
+          <button class="btn btn-success" onclick="restoreCategory('${cat.id}')">恢复</button>
+          <button class="btn btn-danger" onclick="permanentDeleteCategory('${cat.id}')">彻底删除</button>
+        </div>`;
+      cat.items.forEach(item => {
+        html += `<div class="manage-item-row archived">
+          <span class="name">${escapeHtml(item.name)}</span>
+        </div>`;
+      });
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  list.innerHTML = html;
+}
+
+function selectIcon(icon) {
+  selectedIcon = icon;
+  renderManage();
+}
+
+function toggleCatMenu(catId) {
+  const menu = document.getElementById('catMenu_' + catId);
+  if (!menu) return;
+  const willOpen = !menu.classList.contains('show');
+  closeAllMenus();
+  if (willOpen) menu.classList.add('show');
+}
+
+function toggleItemMenu(itemId) {
+  const menu = document.getElementById('itemMenu_' + itemId);
+  if (!menu) return;
+  const willOpen = !menu.classList.contains('show');
+  closeAllMenus();
+  if (willOpen) menu.classList.add('show');
+}
+
+function closeAllMenus() {
+  document.querySelectorAll('.action-menu.show').forEach(m => m.classList.remove('show'));
+}
+
+// Close menus when clicking outside
+document.addEventListener('click', closeAllMenus);
+
+function toggleCountInStats(catId) {
+  const cat = state.categories.find(c => c.id === catId);
+  if (!cat) return;
+  cat.countInStats = cat.countInStats === false; // toggle to true if currently false
+  saveData();
+  renderManage();
+  showToast(cat.countInStats === false ? '已改为不计统计' : '已纳入统计');
+  // Reopen the menu so user can toggle repeatedly without reopening
+  const menu = document.getElementById('catMenu_' + catId);
+  if (menu) menu.classList.add('show');
+}
+
+function moveCategory(catId, direction) {
+  const idx = state.categories.findIndex(c => c.id === catId);
+  if (idx < 0) return;
+  const newIdx = idx + direction;
+  if (newIdx < 0 || newIdx >= state.categories.length) {
+    showToast(direction < 0 ? '已经在最上面' : '已经在最下面');
+    return;
+  }
+  const [moved] = state.categories.splice(idx, 1);
+  state.categories.splice(newIdx, 0, moved);
+  saveData();
+  renderManage();
+  showToast(direction < 0 ? '已上移' : '已下移');
+}
+
+function setCategoryStartDate(catId) {
+  const cat = state.categories.find(c => c.id === catId);
+  if (!cat) return;
+  const current = cat.startDate || '';
+  openEditModal(`${escapeHtml(cat.name)} · 开始日期`, '设置后，该分类仅在此日期及之后出现在打卡页',
+    `<label>开始日期（留空 = 立即生效）</label>
+     <input type="date" class="modal-input" id="modalStartDate" value="${current}">
+     <div class="quant-input-tip">例如：计划 9 月开始健身，设为 2026-09-01，之前打卡页不显示该分类</div>`,
+    { type: 'setStartDate', catId: catId }, '保存');
+}
+
+function openNoteModal(itemId) {
+  const item = getItemById(itemId);
+  if (!item) return;
+  const dateKey = formatDate(currentDate);
+  const rec = getDayRecords(dateKey).find(r => r.id === itemId);
+  const note = rec ? rec.note : '';
+  openEditModal(`${escapeHtml(item.name)} · 备注`, `${formatDate(currentDate)}`,
+    `<textarea class="modal-input note-textarea" id="modalNote" rows="3" maxlength="200" placeholder="记录备注（可选，最多200字）">${escapeHtml(note)}</textarea>
+     <div class="quant-input-tip">保存后，备注会显示在打卡项旁边（小字），💬 位于行最右侧</div>
+     ${note ? `<button class="btn btn-danger btn-block" style="width:100%; margin-top:12px;" onclick="clearNoteNow()">🗑️ 删除备注</button>` : ''}`,
+    { type: 'note', itemId: itemId }, '保存');
+}
+
+function clearNoteNow() {
+  const s = editModalState;
+  if (s && s.type === 'note' && s.itemId) {
+    setNote(s.itemId, '');
+    showToast('备注已删除');
+  }
+  closeEditModal();
+}
+
+function editCategoryName(catId) {
+  const cat = state.categories.find(c => c.id === catId);
+  if (!cat) return;
+  openEditModal('编辑分类', '',
+    `<label>分类名称</label>
+     <input class="modal-input" id="modalInput1" maxlength="20" value="${escapeHtml(cat.name)}">`,
+    { type: 'editCat', catId: catId });
+}
+
+function editItemConfig(catId, itemId) {
+  const cat = state.categories.find(c => c.id === catId);
+  const item = cat && cat.items.find(i => i.id === itemId);
+  if (!item) return;
+  const hasQuant = isQuantItem(item);
+  openEditModal('编辑打卡项', '',
+    `<label>打卡项名称</label>
+     <input class="modal-input" id="modalInput1" maxlength="30" value="${escapeHtml(item.name)}">
+     <label class="quant-toggle-row">
+       <input type="checkbox" id="modalQuantOn" ${hasQuant ? 'checked' : ''} onchange="toggleQuantFields()">
+       启用量化配置（记录每日完成数值）
+     </label>
+     <div id="quantFields" style="display:${hasQuant ? 'block' : 'none'}">
+       <label>量化单位（如：杯、分钟、公里、个、元）</label>
+       <input class="modal-input" id="modalUnit" maxlength="10" placeholder="杯" value="${item.quant ? escapeHtml(item.quant.unit) : ''}">
+       <label>目标数值（每天，可为负）</label>
+       <input class="modal-input" id="modalTarget" type="number" step="any" placeholder="8"
+         value="${item.quant ? item.quant.target : ''}">
+       <label>达标判定方式</label>
+       <select class="modal-input" id="modalCompare">
+         <option value="gte" ${(item.quant && item.quant.compare === 'lte') ? '' : 'selected'}>数值 ≥ 目标 算达标（默认）</option>
+         <option value="lte" ${(item.quant && item.quant.compare === 'lte') ? 'selected' : ''}>数值 ≤ 目标 算达标</option>
+       </select>
+       <div class="quant-input-tip">≥（大于达标）：完成值不低于目标即达标；≤（小于达标）：完成值不高于目标即达标。目标与每日记录均可为负值（如体重、盈亏）。</div>
+     </div>`,
+    { type: 'editItem', catId: catId, itemId: itemId });
+}
+
+function openQuantInput(itemId) {
+  const item = getItemById(itemId);
+  if (!item) return;
+  const dateKey = formatDate(currentDate);
+  const rec = getDayRecords(dateKey).find(r => r.id === itemId);
+  const cur = rec ? rec.value : '';
+  const cmp = (item.quant && item.quant.compare) || 'gte';
+  const sym = cmp === 'lte' ? '≤' : '≥';
+  const goalText = `目标 ${sym} ${item.quant.target} ${item.quant.unit}/天`;
+  openEditModal(`${item.name} 打卡`,
+    `${formatDate(currentDate)} · ${goalText}`,
+    `<div class="quant-input-row">
+       <input class="modal-input" id="modalQuantValue" type="number" step="any"
+         value="${cur}" placeholder="实际完成数值（可为负）" inputmode="decimal">
+       <span class="quant-unit">${escapeHtml(item.quant.unit)}</span>
+     </div>
+     <div class="quant-input-tip">填写 0 或留空 = 取消本次打卡；可输入负值（如体重、盈亏）。${sym} ${item.quant.target} ${item.quant.unit} 才算达标</div>`,
+    { type: 'quantInput', itemId: itemId }, '保存');
+}
+
+function addCategory() {
+  const input = document.getElementById('newCatName');
+  const name = input.value.trim();
+  if (!name) {
+    showToast('请输入分类名称');
+    return;
+  }
+  const countInStats = document.getElementById('newCatCountInStats').checked;
+  state.categories.push({
+    id: genId('cat'),
+    name: name,
+    items: [],
+    archived: false,
+    countInStats: countInStats
+  });
+  saveData();
+  input.value = '';
+  document.getElementById('newCatCountInStats').checked = true; // reset to default
+  renderManage();
+  showToast('分类已添加');
+}
+
+function addItem(catId, input) {
+  const name = input.value.trim();
+  if (!name) {
+    showToast('请输入打卡项名称');
+    return;
+  }
+  const cat = state.categories.find(c => c.id === catId);
+  if (cat) {
+    cat.items.push({ id: genId('item'), name: name, archived: false });
+    saveData();
+    renderManage();
+    showToast('打卡项已添加');
+  }
+}
+
+function archiveCategory(catId) {
+  if (!confirm('归档后该分类将不再显示在打卡页面，但历史记录会保留。可随时恢复。')) return;
+  const cat = state.categories.find(c => c.id === catId);
+  if (cat) {
+    cat.archived = true;
+    saveData();
+    renderManage();
+    showToast('分类已归档');
+  }
+}
+
+function restoreCategory(catId) {
+  const cat = state.categories.find(c => c.id === catId);
+  if (cat) {
+    cat.archived = false;
+    saveData();
+    renderManage();
+    showToast('分类已恢复');
+  }
+}
+
+function permanentDeleteCategory(catId) {
+  const cat = state.categories.find(c => c.id === catId);
+  if (!cat) return;
+  if (!confirm(`确定彻底删除「${cat.name}」及其所有打卡项吗？\n\n⚠️ 此操作不可恢复，所有历史打卡记录将永久丢失！`)) return;
+  if (!confirm('再次确认：真的要永久删除吗？')) return;
+  // Collect all item IDs
+  const itemIds = cat.items.map(i => i.id);
+  state.categories = state.categories.filter(c => c.id !== catId);
+  // Clean up records (supports both string and {id,value} entries)
+  Object.keys(state.records).forEach(date => {
+    state.records[date] = state.records[date].filter(r => !itemIds.includes(getRecordObj(r).id));
+    if (state.records[date].length === 0) delete state.records[date];
+  });
+  saveData();
+  renderManage();
+  showToast('分类已彻底删除');
+}
+
+function archiveItem(catId, itemId) {
+  const cat = state.categories.find(c => c.id === catId);
+  if (cat) {
+    const item = cat.items.find(i => i.id === itemId);
+    if (item) {
+      item.archived = true;
+      saveData();
+      renderManage();
+      showToast('打卡项已归档');
+    }
+  }
+}
+
+function restoreItem(catId, itemId) {
+  const cat = state.categories.find(c => c.id === catId);
+  if (cat) {
+    const item = cat.items.find(i => i.id === itemId);
+    if (item) {
+      item.archived = false;
+      saveData();
+      renderManage();
+      showToast('打卡项已恢复');
+    }
+  }
+}
+
+function permanentDeleteItem(catId, itemId) {
+  const cat = state.categories.find(c => c.id === catId);
+  if (!cat) return;
+  const item = cat.items.find(i => i.id === itemId);
+  if (!item) return;
+  if (!confirm(`确定彻底删除「${item.name}」吗？\n\n⚠️ 此操作不可恢复，所有历史打卡记录将永久丢失！`)) return;
+  cat.items = cat.items.filter(i => i.id !== itemId);
+  // Remove from records (supports both string and {id,value} entries)
+  Object.keys(state.records).forEach(date => {
+    state.records[date] = state.records[date].filter(r => getRecordObj(r).id !== itemId);
+    if (state.records[date].length === 0) delete state.records[date];
+  });
+  saveData();
+  renderManage();
+  showToast('打卡项已彻底删除');
+}
+
+// ===== Data Export/Import =====
+function exportData() {
+  const data = JSON.stringify(state, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `checkin_data_${formatDate(new Date())}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('数据已导出');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.categories || !data.records) throw new Error('Invalid format');
+      if (!confirm('导入将覆盖当前所有数据，确定继续吗？')) return;
+      state = data;
+      saveData();
+      renderCheckin();
+      renderManage();
+      showToast('数据已导入');
+    } catch(err) {
+      showToast('导入失败：文件格式错误');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function clearAllData() {
+  if (!confirm('⚠️ 此操作将清空所有打卡分类和记录，且不可恢复！确定继续吗？')) return;
+  if (!confirm('再次确认：真的要清空全部数据吗？')) return;
+  state = { categories: [], records: {} };
+  saveData();
+  renderCheckin();
+  renderManage();
+  showToast('所有数据已清空');
+}
+
+// ===== Utils =====
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+// ===== Init =====
+function initApp() {
+  loadData();
+  renderCheckin();
+
+  // Sync from cloud (pull user's data)
+  syncFromCloud().then(() => {
+    startPeriodicSync();
+    renderCloudStatus();
+    renderCheckin();
+  });
+}
+
+// On page load: check if user is already logged in
+currentUser = getAuthUser();
+if (currentUser && getAuthSession()) {
+  enterApp();
+} else {
+  // Not logged in, show auth overlay
+  switchAuthMode('login');
+  document.getElementById('authEmail').focus();
+}
+</script>
+</body>
+</html>
