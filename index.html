@@ -2430,7 +2430,7 @@ function renderStats() {
 
         html += `<div class="stats-item-row quant-row${itemArchived ? ' archived' : ''}">
           <div class="stats-item-header">
-            <span class="stats-item-name">${escapeHtml(item.name)}${item.archived && !catArchived ? ' <span class="archived-tag">已归档</span>' : ''}<span class="quant-target-tag">🎯 ${isLte ? '≤' : '≥'}${item.quant.target}${escapeHtml(unit)}/天</span></span>
+            <span class="stats-item-name">${escapeHtml(item.name)}${item.archived && !catArchived ? ' <span class="archived-tag">已归档</span>' : ''}<span class="quant-target-tag">🎯 ${item.quant.target}${escapeHtml(unit)}/天</span></span>
             <span class="stats-item-freq">
               <span class="current">${doneDays}</span><span class="total">/${totalDays}天</span>
             </span>
@@ -2524,7 +2524,7 @@ function confirmEditModal() {
         const quantOn = document.getElementById('modalQuantOn').checked;
         if (quantOn) {
           const unit = document.getElementById('modalUnit').value.trim();
-          const target = parseFloat(document.getElementById('modalTarget').value);
+          const target = parseFloat(document.getElementById('modalTarget').value.replace(',', '.'));
           const compare = document.getElementById('modalCompare').value || 'gte';
           if (!unit) { showToast('请输入量化单位'); return; }
           if (isNaN(target)) { showToast('请输入有效的目标数值'); return; }
@@ -2539,7 +2539,7 @@ function confirmEditModal() {
   } else if (s.type === 'quantInput') {
     const input = document.getElementById('modalQuantValue');
     const raw = input.value.trim();
-    const num = raw === '' ? 0 : parseFloat(raw);
+    const num = raw === '' ? 0 : parseFloat(raw.replace(',', '.'));
     if (isNaN(num)) { showToast('请输入有效数值'); return; }
     setQuantValue(s.itemId, num);
     showToast(num !== 0 ? '已记录' : '已取消打卡');
@@ -2789,14 +2789,14 @@ function editItemConfig(catId, itemId) {
        <label>量化单位（如：杯、分钟、公里、个、元）</label>
        <input class="modal-input" id="modalUnit" maxlength="10" placeholder="杯" value="${item.quant ? escapeHtml(item.quant.unit) : ''}">
        <label>目标数值（每天，可为负）</label>
-       <input class="modal-input" id="modalTarget" type="number" step="any" placeholder="8"
+       <input class="modal-input" id="modalTarget" type="text" inputmode="decimal" placeholder="8"
          value="${item.quant ? item.quant.target : ''}">
        <label>达标判定方式</label>
        <select class="modal-input" id="modalCompare">
-         <option value="gte" ${(item.quant && item.quant.compare === 'lte') ? '' : 'selected'}>数值 ≥ 目标 算达标（默认）</option>
-         <option value="lte" ${(item.quant && item.quant.compare === 'lte') ? 'selected' : ''}>数值 ≤ 目标 算达标</option>
+         <option value="gte" ${(item.quant && item.quant.compare === 'lte') ? '' : 'selected'}>完成值不低于目标即达标（默认）</option>
+         <option value="lte" ${(item.quant && item.quant.compare === 'lte') ? 'selected' : ''}>完成值不高于目标即达标</option>
        </select>
-       <div class="quant-input-tip">≥（大于达标）：完成值不低于目标即达标；≤（小于达标）：完成值不高于目标即达标。目标与每日记录均可为负值（如体重、盈亏）。</div>
+       <div class="quant-input-tip">不低于目标（默认）：完成值不低于目标即达标；不高于目标：完成值不高于目标即达标。目标与每日记录均可为负值（如体重、盈亏）。</div>
      </div>`,
     { type: 'editItem', catId: catId, itemId: itemId });
 }
@@ -2807,17 +2807,15 @@ function openQuantInput(itemId) {
   const dateKey = formatDate(currentDate);
   const rec = getDayRecords(dateKey).find(r => r.id === itemId);
   const cur = rec ? rec.value : '';
-  const cmp = (item.quant && item.quant.compare) || 'gte';
-  const sym = cmp === 'lte' ? '≤' : '≥';
-  const goalText = `目标 ${sym} ${item.quant.target} ${item.quant.unit}/天`;
+  const goalText = `目标 ${item.quant.target} ${item.quant.unit}/天`;
   openEditModal(`${item.name} 打卡`,
     `${formatDate(currentDate)} · ${goalText}`,
     `<div class="quant-input-row">
-       <input class="modal-input" id="modalQuantValue" type="number" step="any"
-         value="${cur}" placeholder="实际完成数值（可为负）" inputmode="decimal">
+       <input class="modal-input" id="modalQuantValue" type="text" inputmode="decimal"
+         value="${cur}" placeholder="实际完成数值（可为负）">
        <span class="quant-unit">${escapeHtml(item.quant.unit)}</span>
      </div>
-     <div class="quant-input-tip">填写 0 或留空 = 取消本次打卡；可输入负值（如体重、盈亏）。${sym} ${item.quant.target} ${item.quant.unit} 才算达标</div>`,
+     <div class="quant-input-tip">填写 0 或留空 = 取消本次打卡；可输入负值（如体重、盈亏）。${item.quant.target} ${item.quant.unit} 才算达标</div>`,
     { type: 'quantInput', itemId: itemId }, '保存');
 }
 
