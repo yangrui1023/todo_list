@@ -392,6 +392,39 @@ body {
   font-weight: 600;
   box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
 }
+.stats-custom-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 14px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  box-shadow: var(--shadow);
+}
+.stats-custom-range input[type="date"] {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 6px;
+  font-size: 16px; /* 保持 16px，低于此值 iOS Safari 聚焦会自动放大整页 */
+  color: var(--text-primary);
+  background: transparent;
+  font-family: inherit;
+}
+.stats-custom-sep { font-size: 13px; color: var(--text-muted); flex: 0 0 auto; }
+.stats-custom-apply {
+  flex: 0 0 auto;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
 .stats-period-nav {
   display: flex;
   align-items: center;
@@ -1220,27 +1253,15 @@ body {
 .toast.show { transform: translateX(-50%) translateY(0); }
 
 /* ===== Food (calorie) tab ===== */
-.food-add-card {
-  background: var(--card-bg);
-  border-radius: var(--radius);
-  padding: 14px;
-  box-shadow: var(--shadow);
-  margin-bottom: 14px;
+.food-add-bar { margin-bottom: 12px; }
+.food-add-btn { width: 100%; }
+.trend-empty {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 14px 0;
 }
-.food-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.food-form-grid .full { grid-column: 1 / -1; }
-.food-add-card input, .food-add-card select {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  outline: none;
-  background: var(--card-bg);
-  color: var(--text);
-  box-sizing: border-box;
-}
-.food-add-card input:focus, .food-add-card select:focus { border-color: var(--primary); }
-.food-add-card .btn { margin-top: 10px; width: 100%; }
+.trend-empty-lg { font-size: 13px; padding: 42px 0; }
 .food-search {
   width: 100%;
   padding: 10px 14px;
@@ -1396,8 +1417,8 @@ body {
 <div data-page-node-id="b71bnQnaVHL1s2LDR92M7D" class="tabs">
   <div data-page-node-id="0SUmbWivVZxfK4OXJ4G3uJ" class="tab active" data-tab="checkin" onclick="switchTab('checkin')"><!--pnid:ax3yUKGRX6mqDKkrRDAL7D-->今日打卡</div>
   <div data-page-node-id="yQdcB7FJW2gUp75BrstnNr" class="tab" data-tab="stats" onclick="switchTab('stats')"><!--pnid:6TLPYxZevqXoCJdG1BPQVA-->统计分析</div>
-  <div data-page-node-id="yG2OJ3Guv6FvGgYLDLcNDn" class="tab" data-tab="manage" onclick="switchTab('manage')"><!--pnid:6n7ezAqZW3rnzWIoQyQj8v-->分类管理</div>
   <div class="tab" data-tab="foods" onclick="switchTab('foods')">食物热量</div>
+  <div data-page-node-id="yG2OJ3Guv6FvGgYLDLcNDn" class="tab" data-tab="manage" onclick="switchTab('manage')"><!--pnid:6n7ezAqZW3rnzWIoQyQj8v-->分类管理</div>
 </div>
 
 <div data-page-node-id="zbUN6G0IU1riSfmuxGwJTf" class="container">
@@ -1444,6 +1465,14 @@ body {
       <button data-page-node-id="Z33OX9rIsBBKoKiadwAPSN" class="period-btn active" data-period="week" onclick="switchPeriod('week')"><!--pnid:L1DGwvMJJIriikKnUY3EDl-->周</button>
       <button data-page-node-id="kCvD2OfziUVCKdemrC6Db9" class="period-btn" data-period="month" onclick="switchPeriod('month')"><!--pnid:uV1NfLCQ8ckcxuTSRSi5z2-->月</button>
       <button data-page-node-id="sYl7VAebmF7Oa9OX1i1umq" class="period-btn" data-period="year" onclick="switchPeriod('year')"><!--pnid:BJiJqXYZafXL159v2BIbwF-->年</button>
+      <button class="period-btn" data-period="custom" onclick="switchPeriod('custom')">自定义</button>
+    </div>
+
+    <div class="stats-custom-range" id="statsCustomRange" style="display:none">
+      <input type="date" id="statsCustomStart" aria-label="开始日期">
+      <span class="stats-custom-sep">至</span>
+      <input type="date" id="statsCustomEnd" aria-label="结束日期">
+      <button class="stats-custom-apply" onclick="applyStatsCustomRange()">应用</button>
     </div>
 
     <div data-page-node-id="cVqf7Bjp6uykLt4CuEgFYe" class="stats-period-nav">
@@ -1496,18 +1525,8 @@ body {
 
   <!-- ===== Tab: Foods (calorie library) ===== -->
   <div class="tab-content" id="tab-foods">
-    <div class="food-add-card">
-      <div class="food-form-grid">
-        <select id="foodKind">
-          <option value="food">🍱 食物</option>
-          <option value="drink">🥤 饮品</option>
-        </select>
-        <select id="foodBrandSelect" onchange="onFoodBrandChange()"></select>
-        <input id="foodBrandNew" class="full" type="text" maxlength="20" placeholder="输入新品牌名称" style="display:none">
-        <input id="foodName" class="full" type="text" maxlength="30" placeholder="食物名称（如：巨无霸）">
-        <input id="foodKcal" class="full" type="text" inputmode="numeric" placeholder="热量（千卡，如 550）">
-      </div>
-      <button class="btn btn-primary" onclick="addFood()">+ 添加</button>
+    <div class="food-add-bar">
+      <button class="btn btn-primary food-add-btn" onclick="openFoodAddModal()">＋ 新增记录</button>
     </div>
 
     <input class="food-search" id="foodSearch" type="text" placeholder="🔍 搜索品牌或食物名称" oninput="renderFoods()">
@@ -2371,11 +2390,48 @@ function renderCheckin() {
 // ===== Stats Tab =====
 let statsOffset = 0; // 0 = current period, -1 prev, +1 next
 
+// 自定义统计区间（currentPeriod === 'custom' 时生效）
+let customRange = { start: '', end: '' };
+
+function fmtDateInput(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function switchPeriod(period) {
   currentPeriod = period;
   statsOffset = 0;
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector(`.period-btn[data-period="${period}"]`).classList.add('active');
+  const btn = document.querySelector(`.period-btn[data-period="${period}"]`);
+  if (btn) btn.classList.add('active');
+
+  if (period === 'custom') {
+    if (!customRange.start || !customRange.end) {
+      const end = new Date(); end.setHours(0, 0, 0, 0);
+      const start = new Date(end); start.setDate(end.getDate() - 29);
+      customRange.start = fmtDateInput(start);
+      customRange.end = fmtDateInput(end);
+    }
+    const sEl = document.getElementById('statsCustomStart');
+    const eEl = document.getElementById('statsCustomEnd');
+    if (sEl) sEl.value = customRange.start;
+    if (eEl) eEl.value = customRange.end;
+  }
+  renderStats();
+}
+
+function applyStatsCustomRange() {
+  const sEl = document.getElementById('statsCustomStart');
+  const eEl = document.getElementById('statsCustomEnd');
+  const sv = (sEl && sEl.value) || '';
+  const ev = (eEl && eEl.value) || '';
+  if (!sv || !ev) { showToast('请选择开始和结束日期'); return; }
+  if (sv > ev) { showToast('开始日期不能晚于结束日期'); return; }
+  customRange.start = sv;
+  customRange.end = ev;
+  statsOffset = 0;
   renderStats();
 }
 
@@ -2393,6 +2449,20 @@ function getPeriodRange(period, offset) {
   offset = offset || 0;
   const now = new Date();
   let start, end, totalDays, label;
+  if (period === 'custom') {
+    let s = customRange.start ? new Date(customRange.start + 'T00:00:00') : null;
+    let e = customRange.end ? new Date(customRange.end + 'T00:00:00') : null;
+    if (!s || isNaN(s.getTime())) s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+    if (!e || isNaN(e.getTime())) e = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (s > e) { const t = s; s = e; e = t; }
+    start = s; end = e;
+    totalDays = Math.round((e - s) / 86400000) + 1;
+    const sameYear = s.getFullYear() === e.getFullYear();
+    label = sameYear
+      ? `${s.getMonth()+1}/${s.getDate()} - ${e.getMonth()+1}/${e.getDate()}`
+      : `${s.getFullYear()}/${s.getMonth()+1}/${s.getDate()} - ${e.getFullYear()}/${e.getMonth()+1}/${e.getDate()}`;
+    return { start, end, totalDays, label };
+  }
   if (period === 'week') {
     start = new Date(now);
     const day = now.getDay() || 7; // Mon=1..Sun=7
@@ -2458,17 +2528,40 @@ function sumValueInRange(item, start, end) {
   return sum;
 }
 
-// Daily quant values in range -> [{date, value}] for trend chart
-function dailyValuesInRange(item, start, end) {
+// Daily quant values in range -> [{key, value}]
+// value 为数字 = 当天有填；null = 没填（绝不能当成 0，否则体重折线会一路掉到 0）
+// 默认裁掉「今天之后」的日期：还没到的日子不该出现在折线里
+function dailyValuesInRange(item, start, end, opts) {
+  const trimFuture = !(opts && opts.trimFuture === false);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const days = [];
   const d = new Date(start);
+  d.setHours(0, 0, 0, 0);
   while (d <= end) {
+    if (trimFuture && d > today) break;
     const key = formatDate(d);
     const rec = getDayRecords(key).find(r => r.id === item.id);
-    days.push({ key, value: rec && isChecked(rec) ? rec.value : 0 });
+    days.push({ key, value: (rec && isChecked(rec)) ? rec.value : null });
     d.setDate(d.getDate() + 1);
   }
   return days;
+}
+
+// 坐标轴范围：只有数据本身贴近 0 时才把 0 纳入坐标轴；
+// 像体重 67~68 这种远离 0 的指标直接贴合数据，否则折线会被压成一条水平线。
+function chartRange(values, target) {
+  const nums = values.filter(v => v != null && !isNaN(v));
+  const t = Number(target);
+  const cands = nums.concat([isNaN(t) ? 0 : t]);
+  let mx = Math.max.apply(null, cands);
+  let mn = Math.min.apply(null, cands);
+  const rawSpan = mx - mn;
+  if (mn > 0 && mn <= (rawSpan || 1)) mn = 0;
+  if (mx < 0 && mx >= -(rawSpan || 1)) mx = 0;
+  if (mx === mn) { mx += 1; mn -= 1; }
+  const pad = (mx - mn) * 0.15;
+  return { min: mn - pad, max: mx + pad };
 }
 
 // SVG line chart (no external deps); supports negative values and compare direction
@@ -2477,31 +2570,30 @@ function renderTrendSvg(item, days) {
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const target = item.quant.target;
   const cmp = (item.quant && item.quant.compare) || 'gte';
-  const vals = days.map(d => d.value);
-  // Include 0 as a baseline so positive-only charts keep a zero axis;
-  // negative values extend the axis downward.
-  let maxV = Math.max(target, ...vals, 0);
-  let minV = Math.min(target, ...vals, 0);
-  const span = (maxV - minV) || 1;
-  const pad = span * 0.15;
-  maxV += pad; minV -= pad;
-  const range = (maxV - minV) || 1;
   const n = days.length;
-  const x = i => padL + (n === 1 ? plotW / 2 : i * plotW / (n - 1));
+  // 只画「有填」的点，没填的日子直接跳过（跨过去连直线，不补 0）
+  const filled = days.map((d, i) => ({ i: i, v: d.value })).filter(p => p.v != null);
+  if (filled.length === 0) {
+    return `<div class="trend-empty">本区间暂无记录</div>`;
+  }
+  const rng = chartRange(filled.map(p => p.v), target);
+  const minV = rng.min, maxV = rng.max;
+  const range = (maxV - minV) || 1;
+  const x = i => padL + (n <= 1 ? plotW / 2 : i * plotW / (n - 1));
   const y = v => padT + plotH - ((v - minV) / range) * plotH;
 
   let path = '';
-  days.forEach((d, i) => {
-    const px = x(i).toFixed(1), py = y(d.value).toFixed(1);
-    path += (i === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`);
+  filled.forEach((p, k) => {
+    const px = x(p.i).toFixed(1), py = y(p.v).toFixed(1);
+    path += (k === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`);
   });
 
   const ty = y(target).toFixed(1);
   const tyNum = Number(ty);
   const hitFn = cmp === 'lte' ? (v => v <= target) : (v => v >= target);
-  const dots = days.map((d, i) => {
-    const px = x(i).toFixed(1), py = y(d.value).toFixed(1);
-    const hit = hitFn(d.value);
+  const dots = filled.map(p => {
+    const px = x(p.i).toFixed(1), py = y(p.v).toFixed(1);
+    const hit = hitFn(p.v);
     return `<circle cx="${px}" cy="${py}" r="2.8" fill="${hit ? '#059669' : '#d97706'}" stroke="#fff" stroke-width="1"/>`;
   }).join('');
 
@@ -2517,11 +2609,25 @@ function renderTrendSvg(item, days) {
 function renderStats() {
   const { start, end, totalDays, label } = getPeriodRange(currentPeriod, statsOffset);
 
+  // 自定义区间：显示日期选择条，隐藏「上一/下一周期」（对自定义区间无意义）
+  const customBox = document.getElementById('statsCustomRange');
+  if (customBox) customBox.style.display = currentPeriod === 'custom' ? 'flex' : 'none';
+  const navBox = document.querySelector('.stats-period-nav');
+  if (navBox) navBox.style.display = currentPeriod === 'custom' ? 'none' : 'flex';
+  if (currentPeriod === 'custom') {
+    const sEl = document.getElementById('statsCustomStart');
+    const eEl = document.getElementById('statsCustomEnd');
+    if (sEl && !sEl.value) sEl.value = customRange.start;
+    if (eEl && !eEl.value) eEl.value = customRange.end;
+  }
+
   // Update period nav label (‹ range ›); badge marks current period only
   const navLabel = document.getElementById('statsPeriodLabel');
   if (navLabel) {
-    const periodName = currentPeriod === 'week' ? '周' : (currentPeriod === 'month' ? '月' : '年');
-    const badge = statsOffset === 0 ? `<span class="nav-badge">本${periodName}</span>` : '';
+    const periodName = currentPeriod === 'week' ? '周'
+      : (currentPeriod === 'month' ? '月' : (currentPeriod === 'year' ? '年' : '自定义'));
+    const badge = (statsOffset === 0 && currentPeriod !== 'custom')
+      ? `<span class="nav-badge">本${periodName}</span>` : '';
     navLabel.innerHTML = badge + label;
     navLabel.title = statsOffset === 0 ? `当前${periodName}，点击无变化` : `点击回到当前${periodName}`;
   }
@@ -2754,6 +2860,10 @@ function confirmEditModal() {
     saveData();
     renderFoods();
     showToast('已保存');
+  } else if (s.type === 'addFood') {
+    if (!addFood()) return;   // 校验失败时保持弹窗打开
+    closeEditModal();
+    return;
   } else if (s.type === 'quantExport') {
     const sv = ((document.getElementById('expStart') || {}).value || '').trim();
     const ev = ((document.getElementById('expEnd') || {}).value || '').trim();
@@ -3232,7 +3342,7 @@ function renderFoods() {
   }
 
   if (foods.length === 0) {
-    listEl.innerHTML = `<div class="food-empty">${getFoods().length === 0 ? '还没有食物记录，在上方添加第一条吧' : '没有匹配的结果'}</div>`;
+    listEl.innerHTML = `<div class="food-empty">${getFoods().length === 0 ? '还没有食物记录，点上方「＋ 新增记录」添加第一条' : '没有匹配的结果'}</div>`;
     return;
   }
 
@@ -3277,29 +3387,48 @@ function addFood() {
   const kcalRaw = ((kcalEl && kcalEl.value) || '').replace(/[^0-9.]/g, '');
   const kcal = parseFloat(kcalRaw);
 
-  if (!brand) { showToast('请选择或填写品牌'); return; }
-  if (!name) { showToast('请填写食物名称'); if (nameEl) nameEl.focus(); return; }
-  if (!kcalRaw || isNaN(kcal) || kcal < 0) { showToast('请填写正确的热量数值'); if (kcalEl) kcalEl.focus(); return; }
+  // 返回 false 时调用方（弹窗）保持打开，方便用户改正
+  if (!brand) { showToast('请选择或填写品牌'); return false; }
+  if (!name) { showToast('请填写食物名称'); if (nameEl) nameEl.focus(); return false; }
+  if (!kcalRaw || isNaN(kcal) || kcal < 0) { showToast('请填写正确的热量数值'); if (kcalEl) kcalEl.focus(); return false; }
 
   getFoods().push({ id: genId('food'), kind: kind, brand: brand, name: name, kcal: Math.round(kcal) });
   saveData();
-  if (nameEl) nameEl.value = '';
-  if (kcalEl) kcalEl.value = '';
-  const nb = document.getElementById('foodBrandNew');
-  if (nb) nb.value = '';
   renderFoods();
-  // 加完自动把品牌下拉切到刚用过的品牌，方便连续录入同一品牌
-  const sel2 = document.getElementById('foodBrandSelect');
-  if (sel2) {
-    const hit = [...sel2.options].find(o => o.value === brand);
-    if (hit) {
-      sel2.value = brand;
-      const box = document.getElementById('foodBrandNew');
-      if (box) box.style.display = 'none';
-    }
-  }
   showToast('已添加');
-  if (nameEl) nameEl.focus();
+  return true;
+}
+
+// 新增记录改用弹窗：点按钮才展开，页面本身只留列表
+function openFoodAddModal() {
+  const brands = [...new Set(getFoods().map(f => (f.brand || '').trim()).filter(Boolean))];
+  brands.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  const options = brands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')
+    + `<option value="__new__">＋ 新建品牌…</option>`;
+
+  openEditModal('新增食物记录', '同一品牌会自动归到同一块',
+    `<label>分类</label>
+     <select class="modal-input" id="foodKind">
+       <option value="food">🍱 食物</option>
+       <option value="drink">🥤 饮品</option>
+     </select>
+     <label>品牌</label>
+     <select class="modal-input" id="foodBrandSelect" onchange="onFoodBrandChange()">${options}</select>
+     <input class="modal-input" id="foodBrandNew" type="text" maxlength="20" placeholder="输入新品牌名称" style="display:none">
+     <label>食物名称</label>
+     <input class="modal-input" id="foodName" type="text" maxlength="30" placeholder="如：巨无霸">
+     <label>热量（千卡）</label>
+     <input class="modal-input" id="foodKcal" type="text" inputmode="numeric" placeholder="如：550">`,
+    { type: 'addFood' }, '添加');
+
+  // 一个品牌都还没有时，直接展开「新建品牌」输入框
+  if (brands.length === 0) {
+    const sel = document.getElementById('foodBrandSelect');
+    if (sel) sel.value = '__new__';
+    const box = document.getElementById('foodBrandNew');
+    if (box) box.style.display = 'block';
+  }
+  setTimeout(() => { const el = document.getElementById('foodName'); if (el) el.focus(); }, 80);
 }
 
 function deleteFood(id) {
@@ -3417,21 +3546,25 @@ function openTrendModal(itemId) {
   const days = dailyValuesInRange(item, range.start, range.end);
   const cfg = item.quant;
   const hitFn = (cfg.compare === 'lte') ? (v => v <= cfg.target) : (v => v >= cfg.target);
-  const values = days.map(d => d.value);
-  const hitDays = days.filter(d => hitFn(d.value)).length;
-  const sum = values.reduce((a, b) => a + b, 0);
-  const avg = values.length ? sum / values.length : 0;
-  const max = values.length ? Math.max(...values) : 0;
-  const min = values.length ? Math.min(...values) : 0;
+  // 统计只看「有填」的天，没填的不参与平均/最高/最低
+  const filled = days.map(d => d.value).filter(v => v != null);
+  const hitDays = filled.filter(v => hitFn(v)).length;
+  const sum = filled.reduce((a, b) => a + b, 0);
+  const avg = filled.length ? sum / filled.length : 0;
+  const max = filled.length ? Math.max.apply(null, filled) : 0;
+  const min = filled.length ? Math.min.apply(null, filled) : 0;
+
+  const summaryHtml = filled.length
+    ? `<div class="trend-summary">
+         <span>平均 ${fmtNum(avg)} ${escapeHtml(cfg.unit)}</span>
+         <span>最高 ${fmtNum(max)}</span>
+         <span>最低 ${fmtNum(min)}</span>
+         <span>达标 ${hitDays}/${filled.length} 天</span>
+       </div>`
+    : `<div class="trend-empty trend-empty-lg">本区间还没有记录</div>`;
 
   openEditModal(`${item.name} · 趋势`, `${range.label} · 目标 ${cfg.target} ${cfg.unit}/天`,
-    `${renderTrendSvgLarge(item, days)}
-     <div class="trend-summary">
-       <span>平均 ${fmtNum(avg)} ${escapeHtml(cfg.unit)}</span>
-       <span>最高 ${fmtNum(max)}</span>
-       <span>最低 ${fmtNum(min)}</span>
-       <span>达标 ${hitDays}/${days.length} 天</span>
-     </div>`,
+    `${renderTrendSvgLarge(item, days)}${summaryHtml}`,
     { type: 'trendView' }, '关闭');
 }
 
@@ -3440,47 +3573,46 @@ function renderTrendSvgLarge(item, days) {
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const target = item.quant.target;
   const cmp = item.quant.compare || 'gte';
-  const vals = days.map(d => d.value);
-
-  let maxV = Math.max(target, ...vals, 0);
-  let minV = Math.min(target, ...vals, 0);
-  const span = (maxV - minV) || 1;
-  const padV = span * 0.12;
-  maxV += padV; minV -= padV;
-  const rng = (maxV - minV) || 1;
-
   const n = days.length;
+  // 没填的日子不画点也不连线（直接跳过去），避免出现掉到 0 的锯齿
+  const filled = days.map((d, i) => ({ i: i, v: d.value })).filter(p => p.v != null);
+  if (n === 0 || filled.length === 0) {
+    return `<div class="trend-empty trend-empty-lg">本区间暂无记录</div>`;
+  }
+
+  const rng = chartRange(filled.map(p => p.v), target);
+  const minV = rng.min, maxV = rng.max;
+  const range = (maxV - minV) || 1;
+
   const x = i => padL + (n <= 1 ? plotW / 2 : i * plotW / (n - 1));
-  const y = v => padT + plotH - ((v - minV) / rng) * plotH;
+  const y = v => padT + plotH - ((v - minV) / range) * plotH;
 
   let path = '';
-  days.forEach((d, i) => {
-    const px = x(i).toFixed(1), py = y(d.value).toFixed(1);
-    path += (i === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`);
+  filled.forEach((p, k) => {
+    const px = x(p.i).toFixed(1), py = y(p.v).toFixed(1);
+    path += (k === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`);
   });
 
   const hitFn = cmp === 'lte' ? (v => v <= target) : (v => v >= target);
-  const dots = days.map((d, i) => {
-    const hit = hitFn(d.value);
-    return `<circle cx="${x(i).toFixed(1)}" cy="${y(d.value).toFixed(1)}" r="3.4" fill="${hit ? '#059669' : '#d97706'}" stroke="#fff" stroke-width="1.5"/>`;
+  const dots = filled.map(p => {
+    const hit = hitFn(p.v);
+    return `<circle cx="${x(p.i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="3.4" fill="${hit ? '#059669' : '#d97706'}" stroke="#fff" stroke-width="1.5"/>`;
   }).join('');
 
   let grid = '';
   const ticks = 4;
-  for (let k = 0; k <= ticks; k++) {
-    const v = minV + (rng * k / ticks);
+  for (let t = 0; t <= ticks; t++) {
+    const v = minV + (range * t / ticks);
     const gy = y(v).toFixed(1);
     grid += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="#e5e7eb" stroke-width="0.5"/>`;
     grid += `<text x="${padL - 8}" y="${gy}" text-anchor="end" dominant-baseline="central" font-size="10" fill="#9ca3af">${fmtNum(v)}</text>`;
   }
 
   let xLabels = '';
-  if (n > 0) {
-    const idxs = n === 1 ? [0] : [0, Math.floor((n - 1) / 2), n - 1];
-    [...new Set(idxs)].forEach(i => {
-      xLabels += `<text x="${x(i).toFixed(1)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#9ca3af">${days[i].key.slice(5)}</text>`;
-    });
-  }
+  const idxs = n === 1 ? [0] : [0, Math.floor((n - 1) / 2), n - 1];
+  [...new Set(idxs)].forEach(idx => {
+    xLabels += `<text x="${x(idx).toFixed(1)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#9ca3af">${days[idx].key.slice(5)}</text>`;
+  });
 
   const ty = y(target).toFixed(1);
   return `<svg class="trend-modal-svg" viewBox="0 0 ${W} ${H}" role="img">
