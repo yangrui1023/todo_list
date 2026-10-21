@@ -1337,6 +1337,140 @@ body {
   border: 1px solid var(--border);
 }
 .food-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px; }
+
+/* ===== 打卡页 · 饮食记录 ===== */
+.diet-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  margin-top: 14px;
+}
+.diet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.diet-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.diet-total { font-size: 15px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.diet-total .unit { font-size: 12px; font-weight: 400; color: var(--text-muted); margin-left: 2px; }
+.diet-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.diet-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.diet-row-main { flex: 1; min-width: 0; }
+.diet-row-name {
+  display: block;
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diet-row-brand { font-size: 11px; color: var(--text-muted); margin-left: 4px; font-weight: 400; }
+.diet-qty { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.diet-qty-btn {
+  width: 26px; height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px; line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.diet-qty-btn:active { background: var(--primary-light); }
+.diet-qty-val {
+  min-width: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.diet-row-kcal {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 62px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+.diet-del {
+  flex: 0 0 auto;
+  width: 22px; height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.diet-del:hover { color: var(--danger); }
+.diet-empty { font-size: 13px; color: var(--text-muted); text-align: center; padding: 16px 0 10px; }
+.diet-add-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.diet-add-btn:active { background: var(--primary-light); }
+/* 添加食物弹窗 */
+.diet-picker-search {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  outline: none;
+  box-sizing: border-box;
+}
+.diet-picker-search:focus { border-color: var(--primary); }
+.diet-picker-list {
+  max-height: 44vh;
+  overflow-y: auto;
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.diet-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.diet-picker-row:active { background: var(--bg); }
+.diet-picker-name { flex: 1; min-width: 0; font-size: 14px; color: var(--text); }
+.diet-picker-name .brand { font-size: 11px; color: var(--text-muted); margin-right: 4px; }
+.diet-picker-kcal { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+.diet-picker-add { font-size: 18px; color: var(--primary); line-height: 1; }
+.diet-picker-sum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.diet-picker-sum b { font-size: 15px; color: var(--primary); }
+
 .export-check-list {
   max-height: 220px;
   overflow-y: auto;
@@ -1457,6 +1591,17 @@ body {
     </div>
 
     <div data-page-node-id="uIhODcXPAUz9DlUyg3xmUs" id="checkinList"></div>
+
+    <!-- 当日饮食：从食物库挑，合计热量自动加和 -->
+    <div class="diet-card" id="dietCard">
+      <div class="diet-head">
+        <span class="diet-title" id="dietTitle">🍽 今日饮食</span>
+        <span class="diet-total" id="dietTotal">0<span class="unit">千卡</span></span>
+      </div>
+      <div class="diet-sub" id="dietSub"></div>
+      <div id="dietList"></div>
+      <button class="diet-add-btn" onclick="openDietPicker()">＋ 添加食物</button>
+    </div>
   </div>
 
   <!--pnid:tDMcetyK5XQ7BgoqGX1mrM--><!-- ===== Tab: Stats ===== -->
@@ -1584,15 +1729,17 @@ const ICONS = [
 let state = {
   categories: [],
   records: {}, // { "2026-08-10": ["item_id1", "item_id2"] }
-  foods: []    // [{ id, kind: 'drink'|'food', brand, name, kcal }]
+  foods: [],   // [{ id, kind: 'drink'|'food', brand, name, kcal }]
+  diets: {}    // { "2026-08-10": [{ id, foodId, name, brand, kcal, qty }] }
 };
 
-// 统一补全 state 结构：旧本地缓存 / 旧 JSON 备份 / 云端旧记录都可能缺 foods 字段
+// 统一补全 state 结构：旧本地缓存 / 旧 JSON 备份 / 云端旧记录都可能缺 foods / diets 字段
 function ensureStateShape() {
   if (!state || typeof state !== 'object') state = {};
   if (!Array.isArray(state.categories)) state.categories = [];
   if (!state.records || typeof state.records !== 'object') state.records = {};
   if (!Array.isArray(state.foods)) state.foods = [];
+  if (!state.diets || typeof state.diets !== 'object') state.diets = {};
   return state;
 }
 
@@ -1611,12 +1758,12 @@ function loadData() {
     } catch(e) {
       // Corrupted local cache: start empty, let cloud sync decide (cloud-first)
       console.error('Failed to load data', e);
-      state = { categories: [], records: {}, foods: [] };
+      state = { categories: [], records: {}, foods: [], diets: {} };
     }
   } else {
     // No local cache (new device / after sign-out): start empty,
     // DO NOT load defaults yet — cloud sync will pull real data first.
-    state = { categories: [], records: {}, foods: [] };
+    state = { categories: [], records: {}, foods: [], diets: {} };
   }
 }
 
@@ -1660,7 +1807,8 @@ function loadDefaultData() {
       }
     ],
     records: {},
-    foods: []
+    foods: [],
+    diets: {}
   };
   saveData();
 }
@@ -2297,6 +2445,9 @@ function getStreak(itemId) {
 }
 
 function renderCheckin() {
+  // 饮食区块独立于分类列表渲染，分类为空时也要显示
+  renderDiet();
+
   // Date bar
   document.getElementById('dayLabel').textContent = getDayLabel(currentDate);
   document.getElementById('dateValue').textContent =
@@ -2990,9 +3141,15 @@ function confirmEditModal() {
     if (!name) { showToast('请填写食物名称'); return; }
     if (!kcalRaw || isNaN(kcal) || kcal < 0) { showToast('请填写正确的热量数值'); return; }
     f.kind = kind; f.brand = brand; f.name = name; f.kcal = Math.round(kcal);
+    syncDietFoodSnapshots(f);
     saveData();
     renderFoods();
+    renderDiet();
     showToast('已保存');
+  } else if (s.type === 'dietPicker') {
+    closeEditModal();
+    renderDiet();
+    return;
   } else if (s.type === 'addFood') {
     if (!addFood()) return;   // 校验失败时保持弹窗打开
     closeEditModal();
@@ -3597,6 +3754,184 @@ function editFood(id) {
     { type: 'editFood', id: id }, '保存');
 }
 
+// ===== 打卡页 · 当日饮食（合计热量自动加和）=====
+function getDiets() {
+  if (!state.diets || typeof state.diets !== 'object') state.diets = {};
+  return state.diets;
+}
+
+function getDietEntries(dateKey) {
+  const all = getDiets();
+  if (!Array.isArray(all[dateKey])) all[dateKey] = [];
+  return all[dateKey];
+}
+
+// 单条热量 = 食物热量 × 份数；存了快照，食物库里删掉也还能看到历史
+function dietEntryKcal(e) {
+  return Math.round((Number(e.kcal) || 0) * (Number(e.qty) || 0));
+}
+
+function dietTotalKcal(entries) {
+  return (entries || []).reduce((sum, e) => sum + dietEntryKcal(e), 0);
+}
+
+function renderDiet() {
+  const listEl = document.getElementById('dietList');
+  const totalEl = document.getElementById('dietTotal');
+  if (!listEl || !totalEl) return;
+
+  const dateKey = formatDate(currentDate);
+  const entries = getDietEntries(dateKey);
+  const total = dietTotalKcal(entries);
+  const today = isToday(currentDate);
+
+  const titleEl = document.getElementById('dietTitle');
+  if (titleEl) titleEl.textContent = today ? '🍽 今日饮食' : '🍽 当日饮食';
+  totalEl.innerHTML = `${total}<span class="unit">千卡</span>`;
+
+  const subEl = document.getElementById('dietSub');
+  if (subEl) {
+    const qtySum = entries.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+    subEl.textContent = entries.length ? `${entries.length} 种 · 共 ${qtySum} 份` : '';
+    subEl.style.display = entries.length ? 'block' : 'none';
+  }
+
+  if (entries.length === 0) {
+    listEl.innerHTML = `<div class="diet-empty">还没记录${today ? '今天' : '这天'}吃了什么，点下面「添加食物」</div>`;
+    return;
+  }
+
+  listEl.innerHTML = entries.map(e => {
+    const brand = e.brand ? `<span class="diet-row-brand">${escapeHtml(e.brand)}</span>` : '';
+    return `<div class="diet-row">
+      <div class="diet-row-main"><span class="diet-row-name">${escapeHtml(e.name)}${brand}</span></div>
+      <div class="diet-qty">
+        <button class="diet-qty-btn" onclick="changeDietQty('${e.id}', -1)" aria-label="减一份">−</button>
+        <span class="diet-qty-val">${e.qty}</span>
+        <button class="diet-qty-btn" onclick="changeDietQty('${e.id}', 1)" aria-label="加一份">＋</button>
+      </div>
+      <span class="diet-row-kcal">${dietEntryKcal(e)} 千卡</span>
+      <button class="diet-del" onclick="removeDietEntry('${e.id}')" aria-label="删除">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// 食物被编辑后，已记录的历史快照跟着更新（改名 / 改热量都不会让旧记录失真）
+function syncDietFoodSnapshots(food) {
+  const all = getDiets();
+  Object.keys(all).forEach(k => {
+    (all[k] || []).forEach(e => {
+      if (e.foodId !== food.id) return;
+      e.name = food.name;
+      e.brand = food.brand;
+      e.kcal = Number(food.kcal) || 0;
+    });
+  });
+}
+
+function changeDietQty(entryId, delta) {
+  const entries = getDietEntries(formatDate(currentDate));
+  const e = entries.find(x => x.id === entryId);
+  if (!e) return;
+  const next = (Number(e.qty) || 0) + delta;
+  if (next <= 0) { removeDietEntry(entryId); return; }
+  e.qty = Math.min(next, 99);
+  saveData();
+  renderDiet();
+  refreshDietPickerSum();
+}
+
+function removeDietEntry(entryId) {
+  const dateKey = formatDate(currentDate);
+  const entries = getDietEntries(dateKey);
+  const idx = entries.findIndex(x => x.id === entryId);
+  if (idx < 0) return;
+  const removed = entries.splice(idx, 1)[0];
+  if (entries.length === 0) delete getDiets()[dateKey];
+  saveData();
+  renderDiet();
+  refreshDietPickerSum();
+  showToast(`已移除 ${removed.name}`);
+}
+
+// ---- 添加食物弹窗 ----
+let dietPickerKw = '';
+
+function openDietPicker() {
+  if (getFoods().length === 0) {
+    showToast('食物库还是空的，先去「食物热量」添加');
+    return;
+  }
+  dietPickerKw = '';
+  const entries = getDietEntries(formatDate(currentDate));
+  openEditModal('添加食物', `从食物库选择 · 已记录 ${entries.length} 种`,
+    `<input class="diet-picker-search" id="dietPickerSearch" type="text" placeholder="🔍 搜索品牌或食物" oninput="onDietPickerSearch(this.value)">
+     <div class="diet-picker-list" id="dietPickerList"></div>
+     <div class="diet-picker-sum" id="dietPickerSum"></div>`,
+    { type: 'dietPicker' }, '完成');
+  renderDietPickerList();
+  refreshDietPickerSum();
+  // 不自动聚焦：手机上弹键盘会挡住列表
+  const s = document.getElementById('dietPickerSearch');
+  if (s) setTimeout(() => s.blur(), 60);
+}
+
+function onDietPickerSearch(v) {
+  dietPickerKw = v || '';
+  renderDietPickerList();
+}
+
+function renderDietPickerList() {
+  const el = document.getElementById('dietPickerList');
+  if (!el) return;
+  const kw = dietPickerKw.trim().toLowerCase();
+  let foods = getFoods().slice();
+  if (kw) foods = foods.filter(f => ((f.brand || '') + ' ' + (f.name || '')).toLowerCase().indexOf(kw) >= 0);
+  foods.sort((a, b) => (a.brand || '').localeCompare(b.brand || '', 'zh') || (a.name || '').localeCompare(b.name || '', 'zh'));
+  if (foods.length === 0) {
+    el.innerHTML = `<div class="diet-empty">没有匹配的食物</div>`;
+    return;
+  }
+  el.innerHTML = foods.map(f => `<div class="diet-picker-row" onclick="addDietByFood('${f.id}')">
+      <span class="diet-picker-name"><span class="brand">${escapeHtml(f.brand || '')}</span>${escapeHtml(f.name)}</span>
+      <span class="diet-picker-kcal">${f.kcal} 千卡</span>
+      <span class="diet-picker-add">＋</span>
+    </div>`).join('');
+}
+
+function refreshDietPickerSum() {
+  const el = document.getElementById('dietPickerSum');
+  if (!el) return;
+  const entries = getDietEntries(formatDate(currentDate));
+  const qtySum = entries.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+  el.innerHTML = `<span>已选 ${entries.length} 种 · ${qtySum} 份</span><span>合计 <b>${dietTotalKcal(entries)}</b> 千卡</span>`;
+}
+
+// 同一食物再点一次 = 份数 +1
+function addDietByFood(foodId) {
+  const food = getFoods().find(f => f.id === foodId);
+  if (!food) return;
+  const entries = getDietEntries(formatDate(currentDate));
+  const exist = entries.find(e => e.foodId === foodId);
+  if (exist) {
+    exist.qty = Math.min((Number(exist.qty) || 0) + 1, 99);
+  } else {
+    entries.push({
+      id: genId('diet'),
+      foodId: food.id,
+      name: food.name,
+      brand: food.brand,
+      kcal: Number(food.kcal) || 0,
+      qty: 1
+    });
+  }
+  saveData();
+  renderDiet();
+  refreshDietPickerSum();
+  const total = dietTotalKcal(entries);
+  showToast(`已添加 ${food.name} · 合计 ${total} 千卡`);
+}
+
 // ===== Quant export (CSV) =====
 function collectQuantItems() {
   const out = [];
@@ -3819,7 +4154,7 @@ function importData(event) {
 function clearAllData() {
   if (!confirm('⚠️ 此操作将清空所有打卡分类和记录，且不可恢复！确定继续吗？')) return;
   if (!confirm('再次确认：真的要清空全部数据吗？')) return;
-  state = { categories: [], records: {}, foods: [] };
+  state = { categories: [], records: {}, foods: [], diets: {} };
   saveData();
   renderCheckin();
   renderManage();
