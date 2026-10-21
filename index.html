@@ -2582,10 +2582,10 @@ function fmtTick(v, step) {
 // 坐标轴范围（小图/大图共用）
 // 1) 贴合「有填」的数据，只有数据靠近 0 时才保留 0 基线
 //    —— 否则体重 67~68 这类指标会被压成一条直线；
-// 2) 目标线尽量纳入视野，但最多把一侧撑到数据跨度的 1.5 倍，
-//    否则目标离实际值太远（目标 40、实际 0~2）时整张图只剩贴底的一条线；
-// 3) 目标正好落在数据边缘时，往达标那一侧留一点余量，
-//    否则「达标区」高度为 0，看不出方向；
+// 2) 目标线必须画在图里：目标离数据再远也纳入视野，宁可牺牲折线的起伏，
+//    也不允许出现「只有文字标注、没有虚线」的图；
+// 3) 目标就是视野上下界时，往达标那一侧留 12% 余量，
+//    既让「达标区」看得见，也让虚线不会贴在边框上被当成坐标框；
 // 4) 上下界对齐到刻度步长，左侧标签只会是整数或一两位小数。
 function chartRange(values, target, opts) {
   opts = opts || {};
@@ -2619,18 +2619,12 @@ function chartRange(values, target, opts) {
   if (lo > 0 && lo <= nominal * 0.5) lo = 0;
   if (hi < 0 && -hi <= nominal * 0.5) hi = 0;
 
-  // 目标线是否放进视野
+  // 目标线一定画出来：无论目标离数据多远，都把它纳入视野，绝不用文字替代虚线
   let targetInView = false, offHigh = false, offLow = false;
   if (hasT) {
-    if (t >= lo && t <= hi) {
-      targetInView = true;
-    } else if (t > hi) {
-      if (flat || t - hi <= nominal * 1.5) { hi = t; targetInView = true; }
-      else offHigh = true;
-    } else {
-      if (flat || lo - t <= nominal * 1.5) { lo = t; targetInView = true; }
-      else offLow = true;
-    }
+    if (t > hi) hi = t;
+    else if (t < lo) lo = t;
+    targetInView = true;
   }
 
   // 目标贴在边缘时，往达标侧留 12% 余量，让「达标区」看得见
@@ -2696,7 +2690,9 @@ function renderTrendSvg(item, days) {
   const n = days.length;
   // 只画「有填」的点，没填的日子直接跳过（跨过去连直线，不补 0）
   const filled = days.map((d, i) => ({ i: i, v: d.value })).filter(p => p.v != null);
-  if (filled.length === 0) {
+  // 一条记录都没有、又没有目标值时确实无图可画；只要设了目标，图照样画出来
+  const hasTargetVal = target !== null && target !== undefined && target !== '' && isFinite(Number(target));
+  if (filled.length === 0 && !hasTargetVal) {
     return `<div class="trend-empty">本区间暂无记录</div>`;
   }
 
@@ -2711,16 +2707,14 @@ function renderTrendSvg(item, days) {
     ? `<rect x="${padL}" y="${zoneRect.top.toFixed(1)}" width="${plotW}" height="${zoneRect.height.toFixed(1)}" fill="#059669" opacity="0.09"/>`
     : '';
 
-  // 目标线：在视野内才画；超出视野时只留文字标注（画一条贴边虚线容易被当成图表边框），
-  // 也绝不为了画出目标把刻度拉得过大
-  let targetLine = '', labelY;
-  if (rng.targetInView) {
+  // 目标线：只要设了目标就一定画出来（视野里始终包含目标，不再有「超出显示范围」的空图）
+  let targetLine = '', labelY = padT + plotH - 1, targetLabel = '';
+  if (hasTargetVal && rng.targetInView) {
     const ty = y(Number(target)).toFixed(1);
     const tyNum = Number(ty);
     labelY = (tyNum - 4) < (padT + 5) ? (tyNum + 9) : (tyNum - 4);
     targetLine = `<line x1="${padL}" y1="${ty}" x2="${W - padR}" y2="${ty}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4 3" opacity="0.75"/>`;
-  } else {
-    labelY = rng.offHigh ? (padT + 8) : (padT + plotH - 1);
+    targetLabel = `<text x="${W - padR}" y="${labelY}" text-anchor="end" font-size="9" fill="#dc2626" opacity="0.9" paint-order="stroke" stroke="#fff" stroke-width="2.6" stroke-linejoin="round">目标 ${target} ${goodAbove ? '↑' : '↓'}</text>`;
   }
 
   const hitFn = goodAbove ? (v => v >= target) : (v => v <= target);
@@ -2741,7 +2735,7 @@ function renderTrendSvg(item, days) {
     ${targetLine}
     <path d="${path}" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     ${dots}
-    <text x="${W - padR}" y="${labelY}" text-anchor="end" font-size="9" fill="#dc2626" opacity="0.9" paint-order="stroke" stroke="#fff" stroke-width="2.6" stroke-linejoin="round">目标 ${target} ${goodAbove ? '↑' : '↓'}</text>
+    ${targetLabel}
   </svg>`;
 }
 
@@ -3717,7 +3711,8 @@ function renderTrendSvgLarge(item, days) {
   const n = days.length;
   // 没填的日子不画点也不连线（直接跳过去），避免出现掉到 0 的锯齿
   const filled = days.map((d, i) => ({ i: i, v: d.value })).filter(p => p.v != null);
-  if (n === 0 || filled.length === 0) {
+  const hasTargetVal = target !== null && target !== undefined && target !== '' && isFinite(Number(target));
+  if (n === 0 || (filled.length === 0 && !hasTargetVal)) {
     return `<div class="trend-empty trend-empty-lg">本区间暂无记录</div>`;
   }
 
@@ -3760,27 +3755,24 @@ function renderTrendSvgLarge(item, days) {
     xLabels += `<text x="${x(idx).toFixed(1)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#9ca3af">${days[idx].key.slice(5)}</text>`;
   });
 
-  // 目标线：在视野内才画；超出视野只留标注，不为它放大刻度
+  // 目标线：设了目标就一定画出来，视野里始终包含目标，不留「超出显示范围」的空图
   const dirText = goodAbove ? '以上达标' : '以下达标';
   const dirArrow = goodAbove ? '↑' : '↓';
-  let targetLine = '', labelY;
-  if (rng.targetInView) {
+  const hasT = target !== null && target !== undefined && target !== '' && isFinite(Number(target));
+  let targetLine = '', targetLabel = '';
+  if (hasT && rng.targetInView) {
     const ty = y(Number(target)).toFixed(1);
     const tyNum = Number(ty);
-    labelY = (tyNum - 6) < (padT + 8) ? (tyNum + 14) : (tyNum - 6);
+    const labelY = (tyNum - 6) < (padT + 8) ? (tyNum + 14) : (tyNum - 6);
     targetLine = `<line x1="${padL}" y1="${ty}" x2="${W - padR}" y2="${ty}" stroke="#dc2626" stroke-width="1.2" stroke-dasharray="5 4" opacity="0.85"/>`;
-  } else {
-    labelY = rng.offHigh ? (padT + 11) : (padT + plotH - 3);
+    targetLabel = `<text x="${W - padR}" y="${labelY}" text-anchor="end" font-size="10" fill="#dc2626" paint-order="stroke" stroke="#fff" stroke-width="3" stroke-linejoin="round">${dirArrow} 目标 ${target} ${dirText}</text>`;
   }
-  const labelText = rng.targetInView
-    ? `${dirArrow} 目标 ${target} ${dirText}`
-    : `${dirArrow} 目标 ${target} · 超出显示范围`;
 
   return `<svg class="trend-modal-svg" viewBox="0 0 ${W} ${H}" role="img">
     ${zone}
     ${grid}
     ${targetLine}
-    <text x="${W - padR}" y="${labelY}" text-anchor="end" font-size="10" fill="#dc2626" paint-order="stroke" stroke="#fff" stroke-width="3" stroke-linejoin="round">${labelText}</text>
+    ${targetLabel}
     <path d="${path}" fill="none" stroke="#4f46e5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
     ${dots}
     ${xLabels}
