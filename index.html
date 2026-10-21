@@ -1356,7 +1356,94 @@ body {
 .diet-title { font-size: 14px; font-weight: 600; color: var(--text); }
 .diet-total { font-size: 15px; font-weight: 700; color: var(--primary); white-space: nowrap; }
 .diet-total .unit { font-size: 12px; font-weight: 400; color: var(--text-muted); margin-left: 2px; }
-.diet-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.diet-total.over { color: var(--warning); }
+.diet-sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.diet-sub { font-size: 12px; color: var(--text-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diet-goal-btn {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 0 4px 6px;
+  cursor: pointer;
+}
+.diet-goal-btn:active { color: var(--primary); }
+
+/* 早/午/晚 折叠分组 */
+.diet-meal { border-top: 1px solid var(--border); }
+.diet-meal-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 0 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.diet-meal-icon { font-size: 14px; line-height: 1; flex: 0 0 auto; }
+.diet-meal-name { font-size: 14px; font-weight: 600; color: var(--text); flex: 0 0 auto; }
+.diet-meal-val {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.diet-meal-val b { font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.diet-meal-val b.over { color: var(--warning); }
+.diet-meal-val .nil { color: var(--text-muted); }
+.diet-meal-caret {
+  flex: 0 0 auto;
+  width: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  transition: transform .18s ease;
+}
+.diet-meal.open .diet-meal-caret { transform: rotate(90deg); }
+.diet-meal-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg);
+  overflow: hidden;
+  margin: -4px 0 6px;
+}
+.diet-meal-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--primary);
+  transition: width .25s ease;
+}
+.diet-meal-bar i.over { background: var(--warning); }
+.diet-meal-body { display: none; padding-bottom: 6px; }
+.diet-meal.open .diet-meal-body { display: block; }
+.diet-meal-body .diet-row:first-child { border-top: none; }
+.diet-meal-empty { font-size: 12px; color: var(--text-muted); padding: 6px 0 2px; }
+.diet-meal-add {
+  width: 100%;
+  margin: 6px 0 4px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.diet-meal-add:active { background: var(--primary-light); }
+.diet-goal-tip {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
 .diet-row {
   display: flex;
   align-items: center;
@@ -1592,15 +1679,17 @@ body {
 
     <div data-page-node-id="uIhODcXPAUz9DlUyg3xmUs" id="checkinList"></div>
 
-    <!-- 当日饮食：从食物库挑，合计热量自动加和 -->
+    <!-- 当日饮食：早/午/晚分开记，合计热量自动加和 -->
     <div class="diet-card" id="dietCard">
       <div class="diet-head">
         <span class="diet-title" id="dietTitle">🍽 今日饮食</span>
         <span class="diet-total" id="dietTotal">0<span class="unit">千卡</span></span>
       </div>
-      <div class="diet-sub" id="dietSub"></div>
-      <div id="dietList"></div>
-      <button class="diet-add-btn" onclick="openDietPicker()">＋ 添加食物</button>
+      <div class="diet-sub-row">
+        <div class="diet-sub" id="dietSub"></div>
+        <button class="diet-goal-btn" onclick="openDietGoalModal()" title="设置三餐热量目标">⚙ 目标</button>
+      </div>
+      <div id="dietMeals"></div>
     </div>
   </div>
 
@@ -1730,16 +1819,28 @@ let state = {
   categories: [],
   records: {}, // { "2026-08-10": ["item_id1", "item_id2"] }
   foods: [],   // [{ id, kind: 'drink'|'food', brand, name, kcal }]
-  diets: {}    // { "2026-08-10": [{ id, foodId, name, brand, kcal, qty }] }
+  diets: {},   // { "2026-08-10": [{ id, meal:'breakfast'|'lunch'|'dinner', foodId, name, brand, kcal, qty }] }
+  dietGoals: { breakfast: 500, lunch: 700, dinner: 600 } // 每餐热量目标（千卡），null = 不设目标
 };
 
-// 统一补全 state 结构：旧本地缓存 / 旧 JSON 备份 / 云端旧记录都可能缺 foods / diets 字段
+// 统一补全 state 结构：旧本地缓存 / 旧 JSON 备份 / 云端旧记录都可能缺 foods / diets / dietGoals
 function ensureStateShape() {
   if (!state || typeof state !== 'object') state = {};
   if (!Array.isArray(state.categories)) state.categories = [];
   if (!state.records || typeof state.records !== 'object') state.records = {};
   if (!Array.isArray(state.foods)) state.foods = [];
   if (!state.diets || typeof state.diets !== 'object') state.diets = {};
+  if (!state.dietGoals || typeof state.dietGoals !== 'object') {
+    state.dietGoals = { breakfast: 500, lunch: 700, dinner: 600 };
+  }
+  // 旧记录没有 meal 字段：默认归到午餐（正餐），避免历史数据凭空消失
+  Object.keys(state.diets).forEach(k => {
+    const arr = state.diets[k];
+    if (!Array.isArray(arr)) { state.diets[k] = []; return; }
+    arr.forEach(e => {
+      if (e && ['breakfast', 'lunch', 'dinner'].indexOf(e.meal) < 0) e.meal = 'lunch';
+    });
+  });
   return state;
 }
 
@@ -1758,12 +1859,12 @@ function loadData() {
     } catch(e) {
       // Corrupted local cache: start empty, let cloud sync decide (cloud-first)
       console.error('Failed to load data', e);
-      state = { categories: [], records: {}, foods: [], diets: {} };
+      state = { categories: [], records: {}, foods: [], diets: {}, dietGoals: { breakfast: 500, lunch: 700, dinner: 600 } };
     }
   } else {
     // No local cache (new device / after sign-out): start empty,
     // DO NOT load defaults yet — cloud sync will pull real data first.
-    state = { categories: [], records: {}, foods: [], diets: {} };
+    state = { categories: [], records: {}, foods: [], diets: {}, dietGoals: { breakfast: 500, lunch: 700, dinner: 600 } };
   }
 }
 
@@ -1808,7 +1909,8 @@ function loadDefaultData() {
     ],
     records: {},
     foods: [],
-    diets: {}
+    diets: {},
+    dietGoals: { breakfast: 500, lunch: 700, dinner: 600 }
   };
   saveData();
 }
@@ -3146,6 +3248,22 @@ function confirmEditModal() {
     renderFoods();
     renderDiet();
     showToast('已保存');
+  } else if (s.type === 'dietGoals') {
+    const next = {};
+    for (const m of DIET_MEALS) {
+      const el = document.getElementById('dietGoalInput_' + m.key);
+      const typed = ((el && el.value) || '').trim();
+      const raw = typed.replace(/[^0-9.]/g, '');
+      if (typed === '') { next[m.key] = null; continue; }   // 留空 = 该餐不设目标
+      const n = parseFloat(raw);
+      if (raw === '' || isNaN(n) || n <= 0) { showToast(`${m.name}目标请填大于 0 的数字`); return; }
+      next[m.key] = Math.round(n);
+    }
+    state.dietGoals = next;
+    saveData();
+    closeEditModal();
+    renderDiet();
+    showToast('三餐目标已保存');
   } else if (s.type === 'dietPicker') {
     closeEditModal();
     renderDiet();
@@ -3754,7 +3872,27 @@ function editFood(id) {
     { type: 'editFood', id: id }, '保存');
 }
 
-// ===== 打卡页 · 当日饮食（合计热量自动加和）=====
+// ===== 打卡页 · 当日饮食（早/午/晚分餐记录 + 分餐热量目标）=====
+const DIET_MEALS = [
+  { key: 'breakfast', name: '早餐', icon: '🌅' },
+  { key: 'lunch',     name: '午餐', icon: '☀️' },
+  { key: 'dinner',    name: '晚餐', icon: '🌙' }
+];
+const DIET_MEAL_KEYS = DIET_MEALS.map(m => m.key);
+const DIET_GOAL_DEFAULT = { breakfast: 500, lunch: 700, dinner: 600 };
+
+// 折叠状态放内存即可（属于 UI 状态，不进 state，免得同步到别的设备）
+let dietOpen = {};
+
+function dietMealMeta(key) {
+  return DIET_MEALS.find(m => m.key === key) || DIET_MEALS[1];
+}
+
+// 旧记录没有 meal 字段时归到午餐（正餐），保证历史数据不丢
+function normMeal(m) {
+  return DIET_MEAL_KEYS.indexOf(m) >= 0 ? m : 'lunch';
+}
+
 function getDiets() {
   if (!state.diets || typeof state.diets !== 'object') state.diets = {};
   return state.diets;
@@ -3763,7 +3901,32 @@ function getDiets() {
 function getDietEntries(dateKey) {
   const all = getDiets();
   if (!Array.isArray(all[dateKey])) all[dateKey] = [];
+  all[dateKey].forEach(e => {
+    if (e && DIET_MEAL_KEYS.indexOf(e.meal) < 0) e.meal = 'lunch';
+  });
   return all[dateKey];
+}
+
+// 每餐热量目标（千卡）；null = 这一餐不设目标
+function getDietGoals() {
+  if (!state.dietGoals || typeof state.dietGoals !== 'object') {
+    state.dietGoals = Object.assign({}, DIET_GOAL_DEFAULT);
+  }
+  const out = {};
+  DIET_MEAL_KEYS.forEach(k => {
+    const v = state.dietGoals[k];
+    out[k] = (v === null || v === undefined || v === '') ? null
+      : (isFinite(Number(v)) ? Number(v) : null);
+  });
+  return out;
+}
+
+function dietGoalSum(goals) {
+  return DIET_MEAL_KEYS.reduce((s, k) => s + (goals[k] == null ? 0 : goals[k]), 0);
+}
+
+function dietEntriesOf(entries, mealKey) {
+  return (entries || []).filter(e => normMeal(e.meal) === mealKey);
 }
 
 // 单条热量 = 食物热量 × 份数；存了快照，食物库里删掉也还能看到历史
@@ -3775,35 +3938,14 @@ function dietTotalKcal(entries) {
   return (entries || []).reduce((sum, e) => sum + dietEntryKcal(e), 0);
 }
 
-function renderDiet() {
-  const listEl = document.getElementById('dietList');
-  const totalEl = document.getElementById('dietTotal');
-  if (!listEl || !totalEl) return;
+function toggleDietMeal(key) {
+  dietOpen[key] = !dietOpen[key];
+  renderDiet();
+}
 
-  const dateKey = formatDate(currentDate);
-  const entries = getDietEntries(dateKey);
-  const total = dietTotalKcal(entries);
-  const today = isToday(currentDate);
-
-  const titleEl = document.getElementById('dietTitle');
-  if (titleEl) titleEl.textContent = today ? '🍽 今日饮食' : '🍽 当日饮食';
-  totalEl.innerHTML = `${total}<span class="unit">千卡</span>`;
-
-  const subEl = document.getElementById('dietSub');
-  if (subEl) {
-    const qtySum = entries.reduce((s, e) => s + (Number(e.qty) || 0), 0);
-    subEl.textContent = entries.length ? `${entries.length} 种 · 共 ${qtySum} 份` : '';
-    subEl.style.display = entries.length ? 'block' : 'none';
-  }
-
-  if (entries.length === 0) {
-    listEl.innerHTML = `<div class="diet-empty">还没记录${today ? '今天' : '这天'}吃了什么，点下面「添加食物」</div>`;
-    return;
-  }
-
-  listEl.innerHTML = entries.map(e => {
-    const brand = e.brand ? `<span class="diet-row-brand">${escapeHtml(e.brand)}</span>` : '';
-    return `<div class="diet-row">
+function dietRowHtml(e) {
+  const brand = e.brand ? `<span class="diet-row-brand">${escapeHtml(e.brand)}</span>` : '';
+  return `<div class="diet-row">
       <div class="diet-row-main"><span class="diet-row-name">${escapeHtml(e.name)}${brand}</span></div>
       <div class="diet-qty">
         <button class="diet-qty-btn" onclick="changeDietQty('${e.id}', -1)" aria-label="减一份">−</button>
@@ -3812,6 +3954,62 @@ function renderDiet() {
       </div>
       <span class="diet-row-kcal">${dietEntryKcal(e)} 千卡</span>
       <button class="diet-del" onclick="removeDietEntry('${e.id}')" aria-label="删除">✕</button>
+    </div>`;
+}
+
+function renderDiet() {
+  const wrap = document.getElementById('dietMeals');
+  const totalEl = document.getElementById('dietTotal');
+  if (!wrap || !totalEl) return;
+
+  const dateKey = formatDate(currentDate);
+  const entries = getDietEntries(dateKey);
+  const goals = getDietGoals();
+  const total = dietTotalKcal(entries);
+  const goalSum = dietGoalSum(goals);
+  const today = isToday(currentDate);
+
+  const titleEl = document.getElementById('dietTitle');
+  if (titleEl) titleEl.textContent = today ? '🍽 今日饮食' : '🍽 当日饮食';
+
+  totalEl.innerHTML = goalSum > 0
+    ? `${total}<span class="unit">/ ${goalSum} 千卡</span>`
+    : `${total}<span class="unit">千卡</span>`;
+  totalEl.classList.toggle('over', goalSum > 0 && total > goalSum);
+
+  const subEl = document.getElementById('dietSub');
+  if (subEl) {
+    const qtySum = entries.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+    subEl.textContent = entries.length
+      ? `${entries.length} 项 · 共 ${qtySum} 份`
+      : `还没记录${today ? '今天' : '这天'}吃了什么，点餐次展开添加`;
+  }
+
+  wrap.innerHTML = DIET_MEALS.map(m => {
+    const list = dietEntriesOf(entries, m.key);
+    const sum = dietTotalKcal(list);
+    const goal = goals[m.key];
+    const open = !!dietOpen[m.key];
+    const hasGoal = goal != null && goal > 0;
+    const over = hasGoal && sum > goal;
+    const pct = hasGoal ? Math.min(100, Math.round(sum / goal * 100)) : 0;
+
+    const val = hasGoal
+      ? `<b class="${over ? 'over' : ''}">${sum}</b> / ${goal} 千卡`
+      : (sum > 0 ? `<b>${sum}</b> 千卡` : `<span class="nil">未记录</span>`);
+
+    return `<div class="diet-meal${open ? ' open' : ''}">
+      <div class="diet-meal-head" onclick="toggleDietMeal('${m.key}')">
+        <span class="diet-meal-icon">${m.icon}</span>
+        <span class="diet-meal-name">${m.name}</span>
+        <span class="diet-meal-val">${val}</span>
+        <span class="diet-meal-caret">›</span>
+      </div>
+      ${hasGoal ? `<div class="diet-meal-bar"><i class="${over ? 'over' : ''}" style="width:${pct}%"></i></div>` : ''}
+      <div class="diet-meal-body">
+        ${list.length ? list.map(dietRowHtml).join('') : `<div class="diet-meal-empty">这餐还没记录</div>`}
+        <button class="diet-meal-add" onclick="event.stopPropagation();openDietPicker('${m.key}')">＋ 添加${m.name}</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -3827,6 +4025,17 @@ function syncDietFoodSnapshots(food) {
       e.kcal = Number(food.kcal) || 0;
     });
   });
+}
+
+// 三餐热量目标设置
+function openDietGoalModal() {
+  const g = getDietGoals();
+  const body = DIET_MEALS.map(m => `
+     <label>${m.icon} ${m.name}目标（千卡）</label>
+     <input class="modal-input" id="dietGoalInput_${m.key}" type="text" inputmode="numeric"
+       placeholder="留空 = 这一餐不设目标" value="${g[m.key] == null ? '' : g[m.key]}">`).join('')
+    + `<div class="diet-goal-tip">留空表示该餐不设目标；三项合计即为每日参考总量。超出目标时进度条会变橙。</div>`;
+  openEditModal('三餐热量目标', '按自己的习惯设定，随时可改', body, { type: 'dietGoals' }, '保存');
 }
 
 function changeDietQty(entryId, delta) {
@@ -3854,21 +4063,26 @@ function removeDietEntry(entryId) {
   showToast(`已移除 ${removed.name}`);
 }
 
-// ---- 添加食物弹窗 ----
+// ---- 添加食物弹窗（按餐）----
 let dietPickerKw = '';
+let dietPickerMeal = 'lunch';
 
-function openDietPicker() {
+function openDietPicker(meal) {
   if (getFoods().length === 0) {
     showToast('食物库还是空的，先去「食物热量」添加');
     return;
   }
+  dietPickerMeal = normMeal(meal || dietPickerMeal);
   dietPickerKw = '';
-  const entries = getDietEntries(formatDate(currentDate));
-  openEditModal('添加食物', `从食物库选择 · 已记录 ${entries.length} 种`,
+  const m = dietMealMeta(dietPickerMeal);
+  const list = dietEntriesOf(getDietEntries(formatDate(currentDate)), dietPickerMeal);
+  openEditModal(`添加食物 · ${m.name}`,
+    `已记录 ${list.length} 项 · ${dietTotalKcal(list)} 千卡`,
     `<input class="diet-picker-search" id="dietPickerSearch" type="text" placeholder="🔍 搜索品牌或食物" oninput="onDietPickerSearch(this.value)">
      <div class="diet-picker-list" id="dietPickerList"></div>
      <div class="diet-picker-sum" id="dietPickerSum"></div>`,
     { type: 'dietPicker' }, '完成');
+  dietOpen[dietPickerMeal] = true;
   renderDietPickerList();
   refreshDietPickerSum();
   // 不自动聚焦：手机上弹键盘会挡住列表
@@ -3902,22 +4116,24 @@ function renderDietPickerList() {
 function refreshDietPickerSum() {
   const el = document.getElementById('dietPickerSum');
   if (!el) return;
-  const entries = getDietEntries(formatDate(currentDate));
-  const qtySum = entries.reduce((s, e) => s + (Number(e.qty) || 0), 0);
-  el.innerHTML = `<span>已选 ${entries.length} 种 · ${qtySum} 份</span><span>合计 <b>${dietTotalKcal(entries)}</b> 千卡</span>`;
+  const mine = dietEntriesOf(getDietEntries(formatDate(currentDate)), dietPickerMeal);
+  const qtySum = mine.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+  el.innerHTML = `<span>${dietMealMeta(dietPickerMeal).name} ${mine.length} 项 · ${qtySum} 份</span><span>该餐 <b>${dietTotalKcal(mine)}</b> 千卡</span>`;
 }
 
-// 同一食物再点一次 = 份数 +1
+// 同一餐里同一食物再点一次 = 份数 +1；不同餐各自独立
 function addDietByFood(foodId) {
   const food = getFoods().find(f => f.id === foodId);
   if (!food) return;
+  const meal = dietPickerMeal;
   const entries = getDietEntries(formatDate(currentDate));
-  const exist = entries.find(e => e.foodId === foodId);
+  const exist = entries.find(e => normMeal(e.meal) === meal && e.foodId === foodId);
   if (exist) {
     exist.qty = Math.min((Number(exist.qty) || 0) + 1, 99);
   } else {
     entries.push({
       id: genId('diet'),
+      meal: meal,
       foodId: food.id,
       name: food.name,
       brand: food.brand,
@@ -3926,10 +4142,14 @@ function addDietByFood(foodId) {
     });
   }
   saveData();
+  dietOpen[meal] = true;
   renderDiet();
   refreshDietPickerSum();
-  const total = dietTotalKcal(entries);
-  showToast(`已添加 ${food.name} · 合计 ${total} 千卡`);
+  const mine = dietEntriesOf(entries, meal);
+  const sum = dietTotalKcal(mine);
+  const goal = getDietGoals()[meal];
+  const label = dietMealMeta(meal).name;
+  showToast(goal ? `${label} ${sum} / ${goal} 千卡` : `已添加 ${food.name} · ${label} ${sum} 千卡`);
 }
 
 // ===== Quant export (CSV) =====
@@ -4154,7 +4374,7 @@ function importData(event) {
 function clearAllData() {
   if (!confirm('⚠️ 此操作将清空所有打卡分类和记录，且不可恢复！确定继续吗？')) return;
   if (!confirm('再次确认：真的要清空全部数据吗？')) return;
-  state = { categories: [], records: {}, foods: [], diets: {} };
+  state = { categories: [], records: {}, foods: [], diets: {}, dietGoals: { breakfast: 500, lunch: 700, dinner: 600 } };
   saveData();
   renderCheckin();
   renderManage();
