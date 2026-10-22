@@ -1782,8 +1782,13 @@ body {
 //   render* / draw*   只读渲染，不写 state
 //   open* / close*    开 / 关弹窗，写 ui.modal 与 ui.diet.*
 //   toggle* / add* / remove* / move* / archive* / restore* / set*
-//                     写操作：只负责改 state 与 saveData，不自己挑要刷新哪个视图
+//                     写操作：只改 state，末尾调 commit()，不自己调 render*
 //   get* / is* / fmt* 纯函数，无副作用
+//
+// 渲染约定（第三层）：
+//   写操作只调 commit()，重画什么由 04b 的调度器决定 —— 整块重画当前 tab 的全部容器。
+//   所以不存在「漏刷某块」：新增一块同屏界面，只要把容器加进 TAB_RENDERERS 就够了。
+//   只在一种情况下直接调 render*：初始化（initApp）与纯界面导航（切日期 / 切 tab）。
 //
 // 状态约定：
 //   state   业务数据，会进本地缓存 / 云同步 / JSON 备份，字段变更必须走 ensureStateShape
@@ -1854,7 +1859,8 @@ const ui = {
   icon: ICONS[0],                         // 新建分类时选中的图标
   foodFilter: 'all',                      // 食物库筛选：all | drink | food
   modal: null,                            // 通用弹窗上下文 { type, catId, itemId, ... }
-  diet: { meal: 'lunch', view: 'detail', kw: '' } // 记账弹窗：餐次 / 视图 / 搜索词
+  diet: { meal: 'lunch', view: 'detail', kw: '' }, // 记账弹窗：餐次 / 视图 / 搜索词
+  tab: 'checkin'                          // 当前 tab：checkin | stats | manage | foods
 };
 
 // ===== 同步状态：登录会话与云同步节奏，与业务数据无关 =====
@@ -1989,9 +1995,15 @@ function loadDefaultData() {
   saveData();
 }
 
-function saveData() {
+// 存本地与推云是两件事：写操作只需要「存下来」，至于什么时候推云由调度器决定
+function persist() {
   state._updated_at = new Date().toISOString();
   localStorage.setItem(getStorageKey(), JSON.stringify(state));
+}
+
+// 兼容旧调用点：本层迁移完成后，业务写函数不应再直接调用它
+function saveData() {
+  persist();
   scheduleCloudPush();
 }
 
@@ -2307,14 +2319,7 @@ async function syncFromCloud() {
     state = cloudData;
     ensureStateShape();
     localStorage.setItem(getStorageKey(), JSON.stringify(state));
-    const activeTab = document.querySelector('.tab.active');
-    if (activeTab) {
-      const tabName = activeTab.getAttribute('data-tab');
-      if (tabName === 'checkin') renderCheckin();
-      else if (tabName === 'stats') renderStats();
-      else if (tabName === 'manage') renderManage();
-      else if (tabName === 'foods') renderFoods();
-    }
+    paintCurrentTab();   // 云端覆盖本地后，当前屏幕整块重画
     updateSyncStatus('online', '已同步');
   } else if (localTime > cloudTime) {
     await pushCloudData();
@@ -2399,10 +2404,72 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
   document.getElementById(`tab-${tab}`).classList.add('active');
-  if (tab === 'checkin') renderCheckin();
-  if (tab === 'stats') renderStats();
-  if (tab === 'manage') { renderManage(); renderCloudStatus(); }
-  if (tab === 'foods') renderFoods();
+  ui.tab = tab;
+  renderPending = false;   // 切 tab 时立即重画，不等下一帧
+  paintCurrentTab();
+}
+
+/* ==========================================================================
+   04b · 渲染调度：单一写入口
+   写操作只改 state，重画什么由这里决定——不要在写函数里手写 renderXxx()。
+   ========================================================================== */
+
+// 每个 tab 里有哪些容器。flush 时把当前 tab 的容器全部重画一遍，
+// 所以「同屏的两块只刷了一块」这类漏刷，根源上不会再发生。
+const TAB_RENDERERS = {
+  checkin: [renderCheckin, renderCalendar],
+  stats:   [renderStats],
+  manage:  [renderManage, renderCloudStatus],
+  foods:   [renderFoods]
+};
+
+let renderPending = false;
+
+// 唯一的写入口。两种用法等价：
+//   commit(() => { state.x = 1; })   改数据 + 提交，推荐
+//   state.x = 1; commit();           已经改好了，宣布这批改动结束
+// 后者用于改动散落在多个分支里的函数，避免为了包一层 commit 把逻辑拆碎。
+function commit(mutate) {
+  if (typeof mutate === 'function') mutate();
+  persist();
+  scheduleRender();
+}
+
+// 一帧内合并多次写入，避免一次操作把同一块界面重画三遍
+function scheduleRender() {
+  if (renderPending) return;
+  renderPending = true;
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(flushRender);
+  } else {
+    flushRender();   // 测试环境（Node）没有 rAF：同步重画，便于直接断言
+  }
+}
+
+function flushRender() {
+  renderPending = false;
+  paintCurrentTab();
+  syncOpenModal();
+  scheduleCloudPush();
+}
+
+// 只重画当前 tab：看不见的 tab 在 switchTab 时会重画，本来就是新的。
+// 前后记住滚动位置，整块重绘不该让页面跳回顶部。
+function paintCurrentTab() {
+  const fns = TAB_RENDERERS[ui.tab] || TAB_RENDERERS.checkin;
+  const scroller = document.scrollingElement;
+  const top = scroller ? scroller.scrollTop : 0;
+  fns.forEach(fn => {
+    if (typeof fn !== 'function') return;
+    try { fn(); } catch (e) { console.error('render failed:', e); }
+  });
+  if (scroller && scroller.scrollTop !== top) scroller.scrollTop = top;
+}
+
+// 弹窗不在任何 tab 内，单独同步：只有需要跟着数据变的那类弹窗才重画
+function syncOpenModal() {
+  if (!ui.modal) return;
+  if (ui.modal.type === 'dietMeal') renderDietModalLive();
 }
 
 /* ==========================================================================
@@ -2487,19 +2554,18 @@ function setNote(itemId, note) {
     else list.splice(idx, 1);
   }
   if (list.length === 0) delete state.records[dateKey];
-  saveData();
-  renderCheckin();
+  commit();
 }
 
 function changeDate(delta) {
   ui.date.setDate(ui.date.getDate() + delta);
-  renderCheckin();
+  paintCurrentTab();
 }
 
 function goToday() {
   ui.date = new Date();
   ui.calMonth = new Date();
-  renderCheckin();
+  paintCurrentTab();
 }
 
 // ===== Calendar =====
@@ -2578,8 +2644,7 @@ function selectCalDate(dateKey) {
   ui.date = parseDate(dateKey);
   // Keep calendar open; user closes it by clicking the 📅 button again
   ui.calMonth = new Date(ui.date.getFullYear(), ui.date.getMonth(), 1);
-  renderCalendar();
-  renderCheckin();
+  paintCurrentTab();
 }
 
 function toggleCheckin(itemId) {
@@ -2598,8 +2663,7 @@ function toggleCheckin(itemId) {
   } else {
     state.records[dateKey].push(itemId);
   }
-  saveData();
-  renderCheckin();
+  commit();
 }
 
 function setQuantValue(itemId, value) {
@@ -2617,8 +2681,7 @@ function setQuantValue(itemId, value) {
     list.splice(idx, 1); // value 0 -> remove (clears check-in)
   }
   if (list.length === 0) delete state.records[dateKey];
-  saveData();
-  renderCheckin();
+  commit();
 }
 
 function getStreak(itemId) {
@@ -3384,8 +3447,7 @@ function confirmEditModal() {
     const cat = state.categories.find(c => c.id === s.catId);
     if (cat) {
       cat.name = v;
-      saveData();
-      renderManage();
+      commit();
       showToast('分类名称已修改');
     }
   } else if (s.type === 'editItem') {
@@ -3406,8 +3468,7 @@ function confirmEditModal() {
         } else {
           delete item.quant;
         }
-        saveData();
-        renderManage();
+        commit();
         showToast('打卡项已修改');
       }
   } else if (s.type === 'editFood') {
@@ -3423,9 +3484,7 @@ function confirmEditModal() {
     if (!kcalRaw || isNaN(kcal) || kcal < 0) { showToast('请填写正确的热量数值'); return; }
     f.kind = kind; f.brand = brand; f.name = name; f.kcal = Math.round(kcal);
     syncDietFoodSnapshots(f);
-    saveData();
-    renderFoods();
-    renderCheckin();
+    commit();
     showToast('已保存');
   } else if (s.type === 'dietGoals') {
     const next = {};
@@ -3450,9 +3509,8 @@ function confirmEditModal() {
       next.total = Math.round(tn);
     }
     state.dietGoals = next;
-    saveData();
+    commit();
     closeEditModal();
-    renderCheckin();
     showToast('饮食目标已保存');
   } else if (s.type === 'dietMeal') {
     closeEditModal();
@@ -3495,8 +3553,7 @@ function confirmEditModal() {
     const cat = state.categories.find(c => c.id === s.catId);
     if (cat) {
       cat.startDate = date || undefined;
-      saveData();
-      renderManage();
+      commit();
       showToast(date ? `开始日期设为 ${date}` : '已清除开始日期（立即生效）');
     }
   }
@@ -3693,9 +3750,7 @@ function toggleCatEnabled(catId) {
   const cat = state.categories.find(c => c.id === catId);
   if (!cat) return;
   cat.enabled = cat.enabled === false;   // false → true，其余 → false
-  saveData();
-  renderManage();
-  renderCheckin();
+  commit();
   showToast(cat.enabled === false ? `「${cat.name}」已停用，打卡页不再显示` : `「${cat.name}」已启用`);
   const menu = document.getElementById('catMenu_' + catId);
   if (menu) menu.classList.add('show');
@@ -3733,8 +3788,7 @@ function toggleCountInStats(catId) {
   const cat = state.categories.find(c => c.id === catId);
   if (!cat) return;
   cat.countInStats = cat.countInStats === false; // toggle to true if currently false
-  saveData();
-  renderManage();
+  commit();
   showToast(cat.countInStats === false ? '已改为不计统计' : '已纳入统计');
   // Reopen the menu so user can toggle repeatedly without reopening
   const menu = document.getElementById('catMenu_' + catId);
@@ -3751,8 +3805,7 @@ function moveCategory(catId, direction) {
   }
   const [moved] = state.categories.splice(idx, 1);
   state.categories.splice(newIdx, 0, moved);
-  saveData();
-  renderManage();
+  commit();
   showToast(direction < 0 ? '已上移' : '已下移');
 }
 
@@ -3881,10 +3934,9 @@ function addCategory() {
     archived: false,
     countInStats: countInStats
   });
-  saveData();
   input.value = '';
   document.getElementById('newCatCountInStats').checked = true; // reset to default
-  renderManage();
+  commit();
   showToast('分类已添加');
 }
 
@@ -3897,8 +3949,7 @@ function addItem(catId, input) {
   const cat = state.categories.find(c => c.id === catId);
   if (cat) {
     cat.items.push({ id: genId('item'), name: name, archived: false });
-    saveData();
-    renderManage();
+    commit();
     showToast('打卡项已添加');
   }
 }
@@ -3908,8 +3959,7 @@ function archiveCategory(catId) {
   const cat = state.categories.find(c => c.id === catId);
   if (cat) {
     cat.archived = true;
-    saveData();
-    renderManage();
+    commit();
     showToast('分类已归档');
   }
 }
@@ -3918,8 +3968,7 @@ function restoreCategory(catId) {
   const cat = state.categories.find(c => c.id === catId);
   if (cat) {
     cat.archived = false;
-    saveData();
-    renderManage();
+    commit();
     showToast('分类已恢复');
   }
 }
@@ -3946,9 +3995,7 @@ function permanentDeleteCategory(catId) {
     state.dietGoals = Object.assign({}, DIET_GOAL_DEFAULT);
     state.dietRemoved = true;
   }
-  saveData();
-  renderManage();
-  renderCheckin();
+  commit();
   showToast('分类已彻底删除');
 }
 
@@ -3958,8 +4005,7 @@ function archiveItem(catId, itemId) {
     const item = cat.items.find(i => i.id === itemId);
     if (item) {
       item.archived = true;
-      saveData();
-      renderManage();
+      commit();
       showToast('打卡项已归档');
     }
   }
@@ -3971,8 +4017,7 @@ function restoreItem(catId, itemId) {
     const item = cat.items.find(i => i.id === itemId);
     if (item) {
       item.archived = false;
-      saveData();
-      renderManage();
+      commit();
       showToast('打卡项已恢复');
     }
   }
@@ -3990,8 +4035,7 @@ function permanentDeleteItem(catId, itemId) {
     state.records[date] = state.records[date].filter(r => getRecordObj(r).id !== itemId);
     if (state.records[date].length === 0) delete state.records[date];
   });
-  saveData();
-  renderManage();
+  commit();
   showToast('打卡项已彻底删除');
 }
 
@@ -4107,8 +4151,7 @@ function addFood() {
   if (!kcalRaw || isNaN(kcal) || kcal < 0) { showToast('请填写正确的热量数值'); if (kcalEl) kcalEl.focus(); return false; }
 
   getFoods().push({ id: genId('food'), kind: kind, brand: brand, name: name, kcal: Math.round(kcal) });
-  saveData();
-  renderFoods();
+  commit();
   showToast('已添加');
   return true;
 }
@@ -4152,8 +4195,7 @@ function deleteFood(id) {
   const f = list[idx];
   if (!confirm(`确定删除「${f.brand} · ${f.name}」吗？`)) return;
   list.splice(idx, 1);
-  saveData();
-  renderFoods();
+  commit();
   showToast('已删除');
 }
 
@@ -4362,8 +4404,7 @@ function setDietMealNote(dateKey, mealKey, note) {
   if (text) day[mealKey] = text; else delete day[mealKey];
   if (Object.keys(day).length) state.dietMealNotes[dateKey] = day;
   else delete state.dietMealNotes[dateKey];
-  saveData();
-  renderCheckin();
+  commit();
 }
 
 // 打卡页的饮食分类卡片：外层与普通分类完全相同，内容换成三餐行
@@ -4602,8 +4643,7 @@ function addDietByFood(foodId) {
       qty: 1
     });
   }
-  saveData();
-  renderDietModalLive();
+  commit();
   const s = mealState(formatDate(ui.date)).find(x => x.key === meal);
   showToast(s && s.hasGoal
     ? `${s.name} ${s.sum} / ${s.goal} 千卡`
@@ -4617,8 +4657,7 @@ function changeDietQty(entryId, delta) {
   const next = (Number(e.qty) || 0) + delta;
   if (next <= 0) { removeDietEntry(entryId); return; }
   e.qty = Math.min(next, 99);
-  saveData();
-  renderDietModalLive();
+  commit();
 }
 
 function removeDietEntry(entryId) {
@@ -4628,19 +4667,17 @@ function removeDietEntry(entryId) {
   if (idx < 0) return;
   const removed = entries.splice(idx, 1)[0];
   if (entries.length === 0) delete getDiets()[dateKey];
-  saveData();
-  renderDietModalLive();
+  commit();
   showToast(`已移除 ${removed.name}`);
 }
 
-// 弹窗与打卡页同时刷新，避免关掉弹窗才看到变化
+// 弹窗内部重画。不再顺手刷打卡页——那由 commit 统一负责。
 function renderDietModalLive() {
   if (ui.diet.view === 'picker' && document.getElementById('dietPickerList')) {
     renderDietPickerList();
   } else if (document.getElementById('dietModalInner')) {
     renderDietModal();
   }
-  renderCheckin();
 }
 
 // 食物被编辑后，已记录的历史快照跟着更新（改名 / 改热量都不会让旧记录失真）
@@ -4831,10 +4868,7 @@ function importData(event) {
       if (!confirm('导入将覆盖当前所有数据，确定继续吗？')) return;
       state = data;
       ensureStateShape();
-      saveData();
-      renderCheckin();
-      renderManage();
-      renderFoods();
+      commit();
       showToast('数据已导入');
     } catch(err) {
       showToast('导入失败：文件格式错误');
@@ -4848,10 +4882,7 @@ function clearAllData() {
   if (!confirm('⚠️ 此操作将清空所有打卡分类和记录，且不可恢复！确定继续吗？')) return;
   if (!confirm('再次确认：真的要清空全部数据吗？')) return;
   state = { categories: [], records: {}, foods: [], diets: {}, dietGoals: { breakfast: 500, lunch: 700, dinner: 600, total: 2000 } };
-  saveData();
-  renderCheckin();
-  renderManage();
-  renderFoods();
+  commit();
   showToast('所有数据已清空');
 }
 
@@ -4879,13 +4910,13 @@ function showToast(msg) {
 
 function initApp() {
   loadData();
-  renderCheckin();
+  paintCurrentTab();
 
   // Sync from cloud (pull user's data)
   syncFromCloud().then(() => {
     startPeriodicSync();
     renderCloudStatus();
-    renderCheckin();
+    paintCurrentTab();
   });
 }
 

@@ -138,9 +138,12 @@ ok((mg.match(/启用分类/g) || []).length === 2, '普通分类与饮食分类�
 ok(mg.indexOf('计入今日完成') < 0, '不再出现「计入今日完成」这种两套叫法');
 ok(mg.indexOf('纳入统计') >= 0, '统一叫「纳入统计」');
 ok(mg.indexOf('不计完成') < 0, '不再出现「不计完成」这种叫法');
+// 第三层重构后只重画当前 tab：在管理页操作，就断言管理页的容器
+S.switchTab('manage');
 S.toggleCountInStats('c1');
 ok(MG().indexOf('不计统计') >= 0, '关掉统计后标签叫「不计统计」');
 S.toggleCountInStats('c1');
+S.switchTab('checkin');
 ok(mg.indexOf('开始日期') >= 0, '饮食菜单补上「开始日期」');
 ok(mg.indexOf('归档分类') >= 0 && mg.indexOf('删除分类') >= 0, '饮食菜单补上归档 / 删除');
 ok(mg.indexOf('三餐与全天目标') >= 0, '仍保留自己的记录配置入口');

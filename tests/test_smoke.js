@@ -67,7 +67,7 @@ const uiShape = G('typeof ui === "object" && Object.keys(ui).sort().join(",")') 
 const syncShape = G('typeof sync === "object" && Object.keys(sync).sort().join(",")') || '';
 ok(uiShape.indexOf('date') >= 0, '存在 ui 对象');
 ok(syncShape.indexOf('user') >= 0, '存在 sync 对象');
-ok(uiShape === 'calMonth,calendarOpen,customRange,date,diet,foodFilter,icon,modal,period,statsOffset',
+ok(uiShape === 'calMonth,calendarOpen,customRange,date,diet,foodFilter,icon,modal,period,statsOffset,tab',
   'ui 键集合符合预期: ' + uiShape);
 ok(syncShape === 'inFlight,lastAt,mode,pushTimer,timer,user', 'sync 键集合符合预期: ' + syncShape);
 ok(G('Object.keys(ui.diet).sort().join(",")') === 'kw,meal,view', 'ui.diet 三个字段齐备');

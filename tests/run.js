@@ -6,6 +6,7 @@ const path = require('path');
 
 const SUITES = [
   ['test_smoke.js',      '冒烟：所有界面路径点一遍不报错'],
+  ['test_freshness.js',  '新鲜度：写操作后当前 tab 每个容器都是最新'],
   ['test_trend.js',      '折线图：刻度、范围、目标线'],
   ['test_diet_card.js',  '饮食卡片、管理页、弹窗记账'],
   ['test_diet_trend.js', '饮食三餐接入趋势图与统计页'],
