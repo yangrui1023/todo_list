@@ -1421,21 +1421,19 @@ body {
 }
 
 /* 分类管理：饮食目标摘要行 + 停用态 */
-.manage-diet-goals {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  font-size: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  line-height: 1.5;
+/* 饮食目标行：沿用 .manage-item-row，右侧箭头代替 ⋮，整行点开目标设置 */
+.diet-goal-row { cursor: pointer; }
+.diet-goal-row:active { background: var(--bg); }
+.diet-goal-row .diet-goal-arrow {
+  flex: 0 0 auto;
+  padding: 6px 8px;          /* 与普通行的 ⋮ 同尺寸，右侧留白对齐 */
+  color: var(--text-muted);
+  font-size: 17px;
+  line-height: 1;
 }
-.manage-diet-goals:active { background: var(--primary-light); }
-.manage-diet-goals .gear { margin-left: auto; color: var(--primary); flex: 0 0 auto; }
+.diet-goal-row.total .name { font-weight: 600; }
+.diet-goal-none { font-size: 11px; color: var(--text-muted); margin-left: 6px; }
+.quant-mini.total { color: var(--primary); background: var(--primary-light); }
 .manage-category.disabled { opacity: 0.6; }
 .disabled-tag {
   display: inline-block;
@@ -3481,10 +3479,17 @@ function renderManage() {
 function dietManageHtml(cat) {
   const g = getDietGoals();
   const enabled = isCatEnabled(cat);
-  const mealBits = DIET_MEALS
-    .map(m => `${m.name} ${g[m.key] == null ? '—' : g[m.key]}`)
-    .join(' · ');
-  const totalText = g.total == null ? '不限' : g.total;
+
+  // 每个目标单独一行，与普通分类的打卡项同款 .manage-item-row
+  const goalRow = (label, val, isTotal) => `
+      <div class="manage-item-row diet-goal-row${isTotal ? ' total' : ''}" onclick="openDietGoalModal()">
+        <span class="name">${label}${
+          val == null
+            ? ' <span class="diet-goal-none">未设目标</span>'
+            : ` <span class="quant-mini${isTotal ? ' total' : ''}">🎯 ${val} 千卡/天</span>`
+        }</span>
+        <span class="diet-goal-arrow">›</span>
+      </div>`;
 
   return `<div class="manage-category${enabled ? '' : ' disabled'}">
       <div class="manage-category-header">
@@ -3513,10 +3518,8 @@ function dietManageHtml(cat) {
           </div>
         </div>
       </div>
-      <div class="manage-diet-goals" onclick="openDietGoalModal()">
-        <span>🎯 ${mealBits} · 全天 ${totalText}</span>
-        <span class="gear">设置 ›</span>
-      </div>
+      ${DIET_MEALS.map(m => goalRow(m.name, g[m.key], false)).join('')}
+      ${goalRow('全天总计', g.total, true)}
     </div>`;
 }
 
