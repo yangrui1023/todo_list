@@ -10,6 +10,24 @@
 --    走 RPC 的版本，再跑这段。
 -- ============================================================================
 
+-- 0) 预检：函数的属主必须能读到这两张表。
+--    security definer 函数是以「属主身份」执行的，属主 = 表属主才能绕过 RLS
+--    和 revoke。正常情况下两个 owner 都是 postgres，三列值应完全一致。
+--    如果 func_owner 与表 owner 不同，**先停下**，别执行第 1 步之后的内容。
+select p.proname                    as func,
+       r.rolname                    as func_owner,
+       t_app.tableowner              as app_users_owner,
+       t_ck.tableowner               as checkin_data_owner
+  from pg_proc p
+  join pg_roles r on r.oid = p.proowner
+  cross join (select tableowner from pg_tables
+               where schemaname = 'public' and tablename = 'app_users') t_app
+  cross join (select tableowner from pg_tables
+               where schemaname = 'public' and tablename = 'checkin_data') t_ck
+ where p.pronamespace = 'public'::regnamespace
+   and p.proname in ('app_register','app_login','app_logout','app_read_data','app_write_data')
+ order by 1;
+
 -- 1) 确保 RLS 是开的
 alter table public.app_users    enable row level security;
 alter table public.checkin_data enable row level security;
@@ -50,3 +68,15 @@ select table_name,
    and grantee in ('anon', 'authenticated')
  group by table_name, grantee;
 -- 期望：0 行。有行就说明还有权限残留。
+
+-- ----------------------------------------------------------------------------
+-- 回滚（只在「执行完登录立刻失败」时用，平时不用管，保持注释状态）
+--
+-- 判断依据：执行后打开线上页面登录，如果提示的是「密码错误」「账号不存在」，
+-- 说明函数正常工作、只是密码不对，**不要回滚**。
+-- 如果提示「同步失败」「操作失败」并且后端日志报 permission denied，
+-- 说明函数属主没有表权限 → 取消下面两行注释执行，恢复到跑 02 之前的状态。
+-- ----------------------------------------------------------------------------
+-- grant select, insert, update, delete on table public.app_users    to anon, authenticated;
+-- grant select, insert, update, delete on table public.checkin_data to anon, authenticated;
+
