@@ -17,6 +17,7 @@ node tests/run.js
 | `test_diet_card.js` | 饮食卡片三态、管理页四个目标行、弹窗记账 |
 | `test_diet_trend.js` | 三餐 + 全天合计接入趋势图与统计页 |
 | `test_diet_align.js` | 饮食分类与普通分类的行为对齐（菜单 / 开关 / 归档 / 删除 / 连续天数） |
+| `test_diet_picker.js` | 记账 picker：品类 / 品牌两层筛选、筛空可新增、新增后自动回填并加一份 |
 | `test_adapter.js` | 追踪条目适配器：entry 形状统一、注册表完整、渲染层无形态分支、加新形态只改注册表 |
 | `test_security.js` | 两个转义出口（文本 / 属性）、量化单位注入、备注 title、id 白名单、CSV 公式注入 |
 | `test_migrate.js` | 数据结构版本：老数据升级、缺字段补默认、显式 null 不被覆盖、幂等、脏数据兜底 |
@@ -80,6 +81,9 @@ node tests/compare_render.js /tmp/base.html
   会换掉非法 id，并把 `records` 里的引用一起改过来。
 - **CSV 公式前缀**：Excel 会把 `=` 开头的格子当公式执行。文本列走 `csvTextCell()`，
   数值列仍用 `csvCell()`（否则合法的 `-5` 会被写成 `'-5`）。
+- **自由文本不进 `onclick` 字面量**：品牌名是用户输入，`onclick="fn('${brand}')"`
+  里一个单引号就能截断调用。品牌筛选因此按**索引**传参（`setDietPickerBrand(2)`），
+  名字只出现在文本节点里。id 能拼进 `onclick` 是因为它有白名单当护栏。
 
 ## 同步判定：三方比较，不猜
 

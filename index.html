@@ -1526,7 +1526,51 @@ body {
 }
 .diet-del:hover { color: var(--danger); }
 .diet-empty { font-size: 13px; color: var(--text-muted); text-align: center; padding: 16px 0 10px; }
-/* 添加食物弹窗 */
+/* 添加食物弹窗 · 筛选条（品类一行 + 品牌一行，可横滑） */
+.diet-picker-filters { margin-top: 10px; }
+.diet-filter-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.diet-filter-row::-webkit-scrollbar { display: none; }
+.diet-brand-row { margin-top: 6px; }
+.diet-filter-chip {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.diet-filter-chip.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 500;
+}
+.diet-filter-new { border-style: dashed; color: var(--primary); }
+.diet-picker-new {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed var(--primary);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.diet-picker-new:active { background: var(--primary-light); }
+
 .diet-picker-search {
   width: 100%;
   padding: 10px 12px;
@@ -1894,7 +1938,8 @@ const ui = {
   icon: ICONS[0],                         // 新建分类时选中的图标
   foodFilter: 'all',                      // 食物库筛选：all | drink | food
   modal: null,                            // 通用弹窗上下文 { type, catId, itemId, ... }
-  diet: { meal: 'lunch', view: 'detail', kw: '' }, // 记账弹窗：餐次 / 视图 / 搜索词
+  // 记账弹窗：餐次 / 视图 / 搜索词 / 品类筛选(all|drink|food) / 品牌筛选(空=全部)
+  diet: { meal: 'lunch', view: 'detail', kw: '', kind: 'all', brand: '' },
   tab: 'checkin'                          // 当前 tab：checkin | stats | manage | foods
 };
 
@@ -4025,8 +4070,12 @@ function confirmEditModal() {
     closeEditModal();
     return;
   } else if (s.type === 'addFood') {
-    if (!addFood()) return;   // 校验失败时保持弹窗打开
+    const food = addFood();
+    if (!food) return;        // 校验失败时保持弹窗打开
+    const fromDiet = s.fromDiet;
+    const meal = s.meal;
     closeEditModal();
+    if (fromDiet) returnToDietPicker(meal, food);
     return;
   } else if (s.type === 'quantExport') {
     const sv = ((document.getElementById('expStart') || {}).value || '').trim();
@@ -4641,42 +4690,87 @@ function addFood() {
   if (!name) { showToast('请填写食物名称'); if (nameEl) nameEl.focus(); return false; }
   if (!kcalRaw || isNaN(kcal) || kcal < 0) { showToast('请填写正确的热量数值'); if (kcalEl) kcalEl.focus(); return false; }
 
-  getFoods().push({ id: genId('food'), kind: kind, brand: brand, name: name, kcal: Math.round(kcal) });
+  const food = { id: genId('food'), kind: kind, brand: brand, name: name, kcal: Math.round(kcal) };
+  getFoods().push(food);
   commit();
   showToast('已添加');
-  return true;
+  return food;
 }
 
 // 新增记录改用弹窗：点按钮才展开，页面本身只留列表
-function openFoodAddModal() {
+// prefill: { kind, brand, brandNew, name, fromDiet, meal }
+// 从记账 picker 过来时带上 fromDiet，添加完会回到 picker 并自动加一份
+function openFoodAddModal(prefill) {
+  const p = prefill || {};
   const brands = [...new Set(getFoods().map(f => (f.brand || '').trim()).filter(Boolean))];
   brands.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
   const options = brands.map(b => `<option value="${escAttr(b)}">${escapeHtml(b)}</option>`).join('')
     + `<option value="__new__">＋ 新建品牌…</option>`;
+  const kind = p.kind === 'drink' ? 'drink' : 'food';
+  const fromDiet = !!p.fromDiet;
 
-  openEditModal('新增食物记录', '同一品牌会自动归到同一块',
+  openEditModal(
+    fromDiet ? '新增食物' : '新增食物记录',
+    fromDiet ? '添加后自动加一份到当前餐' : '同一品牌会自动归到同一块',
     `<label>分类</label>
      <select class="modal-input" id="foodKind">
-       <option value="food">🍱 食物</option>
-       <option value="drink">🥤 饮品</option>
+       <option value="food"${kind === 'food' ? ' selected' : ''}>🍱 食物</option>
+       <option value="drink"${kind === 'drink' ? ' selected' : ''}>🥤 饮品</option>
      </select>
      <label>品牌</label>
      <select class="modal-input" id="foodBrandSelect" onchange="onFoodBrandChange()">${options}</select>
      <input class="modal-input" id="foodBrandNew" type="text" maxlength="20" placeholder="输入新品牌名称" style="display:none">
      <label>食物名称</label>
-     <input class="modal-input" id="foodName" type="text" maxlength="30" placeholder="如：巨无霸">
+     <input class="modal-input" id="foodName" type="text" maxlength="30" placeholder="如：巨无霸" value="${escAttr(p.name || '')}">
      <label>热量（千卡）</label>
      <input class="modal-input" id="foodKcal" type="text" inputmode="numeric" placeholder="如：550">`,
-    { type: 'addFood' }, '添加');
+    { type: 'addFood', fromDiet: fromDiet, meal: p.meal || '' }, '添加');
 
-  // 一个品牌都还没有时，直接展开「新建品牌」输入框
-  if (brands.length === 0) {
-    const sel = document.getElementById('foodBrandSelect');
+  // 从记账弹窗过来时要保留「取消 / 添加」两个按钮，别沿用只留一个完成按钮的记账样式
+  const modalEl = document.getElementById('editModal');
+  if (modalEl) modalEl.classList.remove('diet-modal');
+
+  const sel = document.getElementById('foodBrandSelect');
+  const box = document.getElementById('foodBrandNew');
+  const wantNew = p.brandNew || brands.length === 0 || (p.brand && brands.indexOf(p.brand) < 0);
+  if (wantNew) {
     if (sel) sel.value = '__new__';
-    const box = document.getElementById('foodBrandNew');
-    if (box) box.style.display = 'block';
+    if (box) {
+      box.style.display = 'block';
+      // 「新增食物」时把当前筛选的品牌带过来；点「新建品牌」就不预填，用户多半是要换个名字
+      if (p.brand && !p.brandNew) box.value = p.brand;
+    }
+  } else if (p.brand && sel) {
+    sel.value = p.brand;
   }
-  setTimeout(() => { const el = document.getElementById('foodName'); if (el) el.focus(); }, 80);
+  setTimeout(() => {
+    const target = wantNew
+      ? document.getElementById('foodBrandNew')
+      : document.getElementById('foodName');
+    if (target) target.focus();
+  }, 80);
+}
+
+// 记账 picker 里的三个新增入口都走这里：mode = 'food'（普通新增）| 'brand'（新建品牌）
+function openFoodAddFromPicker(mode) {
+  openFoodAddModal({
+    kind: ui.diet.kind === 'all' ? 'food' : ui.diet.kind,
+    brand: ui.diet.brand,
+    brandNew: mode === 'brand',
+    name: mode === 'brand' ? '' : ui.diet.kw.trim(),
+    fromDiet: true,
+    meal: ui.diet.meal
+  });
+}
+
+// 新增完食物回到记账 picker：筛选跟着新食物走，保证用户能看见刚加的那条
+function returnToDietPicker(meal, food) {
+  ui.diet.kind = (food.kind === 'drink') ? 'drink' : 'food';
+  ui.diet.brand = (food.brand || '').trim();
+  ui.diet.kw = '';
+  openDietMealModal(meal, true);
+  switchDietModalView('picker');
+  addDietByFood(food.id);
 }
 
 function deleteFood(id) {
@@ -4895,10 +4989,11 @@ function setDietMealNote(dateKey, mealKey, note) {
 }
 
 
-function openDietMealModal(mealKey) {
+// keepFilter = 从新增食物返回时保留原来的筛选，不要把用户刚筛的品牌清掉
+function openDietMealModal(mealKey, keepFilter) {
   ui.diet.meal = normMeal(mealKey);
   ui.diet.view = 'detail';
-  ui.diet.kw = '';
+  if (!keepFilter) { ui.diet.kw = ''; ui.diet.kind = 'all'; ui.diet.brand = ''; }
   openEditModal('', '', '<div id="dietModalInner"></div>', { type: 'dietMeal' }, '完成');
   const modal = document.getElementById('editModal');
   if (modal) modal.classList.add('diet-modal');
@@ -4924,10 +5019,12 @@ function renderDietModal() {
     if (subEl) subEl.textContent = `${s.name} · ${dayText} · 点一下加一份`;
     inner.innerHTML = `<input class="diet-picker-search" id="dietPickerSearch" type="text"
         placeholder="搜索品牌或食物" oninput="onDietPickerSearch(this.value)">
+      <div class="diet-picker-filters" id="dietPickerFilters"></div>
       <div class="diet-picker-list" id="dietPickerList"></div>
       <div class="diet-picker-sum" id="dietPickerSum"></div>`;
     const kwEl = document.getElementById('dietPickerSearch');
     if (kwEl) kwEl.value = ui.diet.kw;
+    renderDietPickerFilters();
     renderDietPickerList();
     return;
   }
@@ -4976,21 +5073,69 @@ function onDietPickerSearch(v) {
   renderDietPickerList();
 }
 
+// 当前品类下出现过的品牌（去重 + 中文排序）
+function dietPickerBrands(kind) {
+  const out = [];
+  getFoods().forEach(f => {
+    if (kind !== 'all' && (f.kind || 'food') !== kind) return;
+    const b = (f.brand || '').trim();
+    if (b && out.indexOf(b) < 0) out.push(b);
+  });
+  out.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  return out;
+}
+
+// 筛选条：品类一行 + 品牌一行；品牌行末尾是「＋ 新建品牌」
+function renderDietPickerFilters() {
+  const el = document.getElementById('dietPickerFilters');
+  if (!el) return;
+  const brands = dietPickerBrands(ui.diet.kind);
+  // 换了品类、或那个品牌的食物被删光了：选中的品牌已经不在列表里，回落到全部
+  if (ui.diet.brand && brands.indexOf(ui.diet.brand) < 0) ui.diet.brand = '';
+  const kinds = [['all', '全部'], ['drink', '🥤 饮品'], ['food', '🍱 食物']];
+  el.innerHTML = `<div class="diet-filter-row">
+      ${kinds.map(k => `<button class="diet-filter-chip${ui.diet.kind === k[0] ? ' active' : ''}" onclick="setDietPickerKind('${k[0]}')">${k[1]}</button>`).join('')}
+    </div>
+    <div class="diet-filter-row diet-brand-row">
+      <button class="diet-filter-chip${ui.diet.brand ? '' : ' active'}" onclick="setDietPickerBrand(0)">全部品牌</button>
+      ${brands.map((b, i) => `<button class="diet-filter-chip${ui.diet.brand === b ? ' active' : ''}" onclick="setDietPickerBrand(${i + 1})">${escapeHtml(b)}</button>`).join('')}
+      <button class="diet-filter-chip diet-filter-new" onclick="openFoodAddFromPicker('brand')">＋ 新建品牌</button>
+    </div>`;
+}
+
+function setDietPickerKind(kind) {
+  ui.diet.kind = (kind === 'drink' || kind === 'food') ? kind : 'all';
+  renderDietPickerFilters();   // 内部会把已失效的品牌筛选清掉
+  renderDietPickerList();
+}
+
+// 品牌按「索引」传，不按名字传：品牌名是用户输入的，
+// 拼进 onclick 的字符串字面量里一个单引号就能把调用截断
+function setDietPickerBrand(idx) {
+  const brands = dietPickerBrands(ui.diet.kind);
+  ui.diet.brand = idx > 0 ? (brands[idx - 1] || '') : '';
+  renderDietPickerFilters();
+  renderDietPickerList();
+}
+
 function renderDietPickerList() {
   const el = document.getElementById('dietPickerList');
   if (!el) return;
   const all = getFoods();
-  if (all.length === 0) {
-    el.innerHTML = `<div class="diet-empty">食物库还是空的，先去「食物热量」添加</div>`;
-    renderDietPickerSum();
-    return;
-  }
   const kw = ui.diet.kw.trim().toLowerCase();
-  let foods = all.slice();
+
+  let foods = all.filter(f => ui.diet.kind === 'all' || (f.kind || 'food') === ui.diet.kind);
+  if (ui.diet.brand) foods = foods.filter(f => (f.brand || '').trim() === ui.diet.brand);
   if (kw) foods = foods.filter(f => ((f.brand || '') + ' ' + (f.name || '')).toLowerCase().indexOf(kw) >= 0);
   foods.sort((a, b) => (a.brand || '').localeCompare(b.brand || '', 'zh') || (a.name || '').localeCompare(b.name || '', 'zh'));
+
   if (foods.length === 0) {
-    el.innerHTML = `<div class="diet-empty">没有匹配的食物</div>`;
+    // 筛到空 / 搜不到，都直接给一条「新增」的路，不用退出弹窗去食物库
+    const tip = kw
+      ? `没找到「${escapeHtml(ui.diet.kw.trim())}」`
+      : (all.length === 0 ? '食物库还是空的' : '没有匹配的食物');
+    el.innerHTML = `<div class="diet-empty">${tip}</div>
+      <button class="diet-picker-new" onclick="openFoodAddFromPicker('food')">＋ 新增食物</button>`;
     renderDietPickerSum();
     return;
   }
@@ -5064,6 +5209,7 @@ function removeDietEntry(entryId) {
 // 弹窗内部重画。不再顺手刷打卡页——那由 commit 统一负责。
 function renderDietModalLive() {
   if (ui.diet.view === 'picker' && document.getElementById('dietPickerList')) {
+    renderDietPickerFilters();   // 食物库变了，品牌 chip 可能多一个 / 少一个
     renderDietPickerList();
   } else if (document.getElementById('dietModalInner')) {
     renderDietModal();

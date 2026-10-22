@@ -70,7 +70,7 @@ ok(syncShape.indexOf('user') >= 0, '存在 sync 对象');
 ok(uiShape === 'calMonth,calendarOpen,customRange,date,diet,foodFilter,icon,modal,period,statsOffset,tab',
   'ui 键集合符合预期: ' + uiShape);
 ok(syncShape === 'baseFp,conflict,inFlight,lastAt,mode,pushTimer,timer,user', 'sync 键集合符合预期: ' + syncShape);
-ok(G('Object.keys(ui.diet).sort().join(",")') === 'kw,meal,view', 'ui.diet 三个字段齐备');
+ok(G('Object.keys(ui.diet).sort().join(",")') === 'brand,kind,kw,meal,view', 'ui.diet 字段齐备（含品类/品牌筛选）');
 
 console.log('\n=== 2. 本地存储键（TDZ 修复后仍能取到）===');
 ok(S.getStorageKey() === G('STORAGE_KEY'), '未登录时用默认键');

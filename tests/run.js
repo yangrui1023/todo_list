@@ -11,6 +11,7 @@ const SUITES = [
   ['test_diet_card.js',  '饮食卡片、管理页、弹窗记账'],
   ['test_diet_trend.js', '饮食三餐接入趋势图与统计页'],
   ['test_diet_align.js', '饮食分类与普通分类行为对齐'],
+  ['test_diet_picker.js','记账 picker：品类/品牌筛选、筛空可新增、新增后回填'],
   ['test_adapter.js',    '追踪条目适配器：形状统一、注册表完整、渲染层无形态分支'],
   ['test_security.js',   '安全：文本/属性两个转义出口、id 白名单、CSV 公式注入'],
   ['test_migrate.js',    '数据结构版本与迁移：老数据升级、幂等、脏数据兜底'],
