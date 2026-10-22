@@ -1434,6 +1434,10 @@ body {
 .diet-goal-row.total .name { font-weight: 600; }
 .diet-goal-none { font-size: 11px; color: var(--text-muted); margin-left: 6px; }
 .quant-mini.total { color: var(--primary); background: var(--primary-light); }
+/* 统计页饮食行：未设目标灰标签；全天合计行与三餐区分开 */
+.quant-target-tag.none { color: var(--text-muted); background: var(--bg); }
+.diet-stats-row.total { border-top: 1px dashed var(--border); }
+.diet-stats-row.total .stats-item-name { font-weight: 600; }
 .manage-category.disabled { opacity: 0.6; }
 .disabled-tag {
   display: inline-block;
@@ -2624,7 +2628,7 @@ function renderCheckin() {
     const notCounted = !isCatCounted(cat);
     html += `<div class="category-card">
       <div class="category-header">
-        <span class="category-name">${escapeHtml(cat.name)}${notCounted ? ' <span class="nocount-tag">不计统计</span>' : ''}</span>
+        <span class="category-name">${escapeHtml(cat.name)}${notCounted ? ' <span class="nocount-tag">不计完成</span>' : ''}</span>
         <span class="category-count">${catDone}/${activeItems.length}</span>
       </div>`;
 
@@ -2829,8 +2833,13 @@ function dailyValuesInRange(item, start, end, opts) {
   while (d <= end) {
     if (trimFuture && d > today) break;
     const key = formatDate(d);
-    const rec = getDayRecords(key).find(r => r.id === item.id);
-    days.push({ key, value: (rec && isChecked(rec)) ? rec.value : null });
+    if (item.dietMeal) {
+      // 饮食三餐：数据来自 state.diets，没有对应记录就是 null
+      days.push({ key, value: dietMealSumOf(key, item.dietMeal) });
+    } else {
+      const rec = getDayRecords(key).find(r => r.id === item.id);
+      days.push({ key, value: (rec && isChecked(rec)) ? rec.value : null });
+    }
     d.setDate(d.getDate() + 1);
   }
   return days;
@@ -2990,7 +2999,7 @@ function renderTrendSvg(item, days) {
   const x = i => padL + (n <= 1 ? plotW / 2 : i * plotW / (n - 1));
   const y = v => padT + plotH - ((v - minV) / range) * plotH;
 
-  const zoneRect = goodZoneRect(target, minV, maxV, goodAbove, y);
+  const zoneRect = hasTargetVal ? goodZoneRect(target, minV, maxV, goodAbove, y) : null;
   const zone = zoneRect
     ? `<rect x="${padL}" y="${zoneRect.top.toFixed(1)}" width="${plotW}" height="${zoneRect.height.toFixed(1)}" fill="#059669" opacity="0.09"/>`
     : '';
@@ -3008,8 +3017,8 @@ function renderTrendSvg(item, days) {
   const hitFn = goodAbove ? (v => v >= target) : (v => v <= target);
   const dots = filled.map(p => {
     const px = x(p.i).toFixed(1), py = y(p.v).toFixed(1);
-    const hit = hitFn(p.v);
-    return `<circle cx="${px}" cy="${py}" r="2.8" fill="${hit ? '#059669' : '#d97706'}" stroke="#fff" stroke-width="1"/>`;
+    const dotColor = !hasTargetVal ? '#4f46e5' : (hitFn(p.v) ? '#059669' : '#d97706');
+    return `<circle cx="${px}" cy="${py}" r="2.8" fill="${dotColor}" stroke="#fff" stroke-width="1"/>`;
   }).join('');
 
   let path = '';
@@ -3105,6 +3114,12 @@ function renderStats() {
   const colors = ['#4f46e5', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
 
   state.categories.forEach((cat, catIdx) => {
+    // 饮食三餐本身就是量化指标：始终出卡片和趋势图。
+    // 「计入今日完成」开关只影响打卡页完成度，不决定统计页可见性。
+    if (isDietCat(cat)) {
+      html += dietStatsCardHtml(cat, start, end, totalDays, colors[catIdx % colors.length]);
+      return;
+    }
     if (cat.items.length === 0) return;
     // Hide non-counted categories from the stats page entirely
     if (!isCatCounted(cat)) return;
@@ -3384,7 +3399,7 @@ function renderManage() {
         <button class="action-trigger" onclick="event.stopPropagation(); toggleCatMenu('${cat.id}')" title="更多操作" aria-label="更多操作">⋮</button>
         <div class="action-menu" id="catMenu_${cat.id}">
           <div class="action-menu-item" onclick="event.stopPropagation(); toggleCountInStats('${cat.id}')">
-            <span><span class="menu-icon">📊</span>纳入统计</span>
+            <span><span class="menu-icon">📊</span>计入今日完成</span>
             <span class="switch-track ${isCatCounted(cat) ? 'on' : ''}"><span class="switch-knob"></span></span>
           </div>
           <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); moveCategory('${cat.id}', -1)">
@@ -3493,7 +3508,7 @@ function dietManageHtml(cat) {
 
   return `<div class="manage-category${enabled ? '' : ' disabled'}">
       <div class="manage-category-header">
-        <span class="name">${escapeHtml(cat.name)}${!isCatCounted(cat) ? ' <span class="nocount-tag">不计统计</span>' : ''}${enabled ? '' : ' <span class="disabled-tag">已停用</span>'}</span>
+        <span class="name">${escapeHtml(cat.name)}${!isCatCounted(cat) ? ' <span class="nocount-tag">不计完成</span>' : ''}${enabled ? '' : ' <span class="disabled-tag">已停用</span>'}</span>
         <button class="action-trigger" onclick="event.stopPropagation(); toggleCatMenu('${cat.id}')" title="更多操作" aria-label="更多操作">⋮</button>
         <div class="action-menu" id="catMenu_${cat.id}">
           <div class="action-menu-item" onclick="event.stopPropagation(); toggleDietEnabled('${cat.id}')">
@@ -4018,6 +4033,40 @@ function getDietGoals() {
   return out;
 }
 
+// ---------- 三餐当作量化指标接进「统计 / 趋势」链路 ----------
+// 三餐没有 item 记录，数据在 state.diets 里，所以用伪 item 桥接：
+// 统计页、小折线图、趋势大图都复用同一套量化组件，不再另写一套图表。
+const DIET_TREND_PREFIX = 'diet_';
+function isDietTrendItemId(id) {
+  return typeof id === 'string' && id.indexOf(DIET_TREND_PREFIX) === 0;
+}
+// 热量是上限 → compare 固定 lte；没设目标时 target 为 null，图里只画折线不画目标线
+// mealKey 取 breakfast/lunch/dinner，或 'total'（全天合计，目标是 dietGoals.total）
+function dietTrendItem(mealKey) {
+  const isTotal = (mealKey === 'total');
+  const m = isTotal ? { key: 'total', name: '全天合计' } : DIET_MEALS.find(x => x.key === mealKey);
+  if (!m) return null;
+  const goal = getDietGoals()[mealKey];
+  return {
+    id: DIET_TREND_PREFIX + mealKey,
+    name: m.name,
+    dietMeal: mealKey,
+    quant: { unit: '千卡', target: (goal == null ? null : goal), compare: 'lte' }
+  };
+}
+function resolveTrendItem(id) {
+  return isDietTrendItemId(id) ? dietTrendItem(String(id).slice(DIET_TREND_PREFIX.length)) : getItemById(id);
+}
+// 某餐某天的摄入合计；那天没记 → null（折线跳过，不补 0）
+// mealKey 为 'total' 时返回全天合计
+function dietMealSumOf(dateKey, mealKey) {
+  const entries = getDietEntries(dateKey);
+  if (!entries || entries.length === 0) return null;
+  if (mealKey === 'total') return dietTotalKcal(entries);
+  const list = dietEntriesOf(entries, mealKey);
+  return list.length ? dietTotalKcal(list) : null;
+}
+
 function dietEntriesOf(entries, mealKey) {
   return (entries || []).filter(e => normMeal(e.meal) === mealKey);
 }
@@ -4105,6 +4154,59 @@ function dietCardHtml(cat, dateKey) {
       <div class="category-header">
         <span class="category-name">${escapeHtml(cat.name)}${notCounted ? ' <span class="nocount-tag">不计统计</span>' : ''}</span>
         <span class="category-count diet-count${overAll ? ' over' : ''}">${countText}</span>
+      </div>
+      ${rows}
+    </div>`;
+}
+
+// 统计页的饮食卡片：三餐 + 全天合计都当量化项渲染（带趋势小图，点行看大图）
+function dietStatsCardHtml(cat, start, end, totalDays, color) {
+  const goals = getDietGoals();
+  const list = DIET_MEALS.concat([{ key: 'total', name: '全天合计' }]);
+
+  const rows = list.map(m => {
+    const isTotal = m.key === 'total';
+    const goal = goals[isTotal ? 'total' : m.key];
+    const hasGoal = goal != null && goal > 0;
+    const item = dietTrendItem(m.key);
+    const daily = dailyValuesInRange(item, start, end);
+    const filled = daily.map(d => d.value).filter(v => v != null);
+    const sum = filled.reduce((a, b) => a + b, 0);
+    const avg = filled.length ? Math.round(sum / filled.length) : 0;
+    // 热量是上限：不超过目标才算达标；没设目标就只看记录率
+    const hitDays = hasGoal ? filled.filter(v => v <= goal).length : 0;
+    const rateVal = Math.round((hasGoal ? hitDays : filled.length) / Math.max(totalDays, 1) * 100);
+
+    const targetTag = hasGoal
+      ? `<span class="quant-target-tag">🎯 ${goal}千卡/天</span>`
+      : `<span class="quant-target-tag none">未设目标</span>`;
+    const freq = hasGoal
+      ? `<span class="current">${hitDays}</span><span class="total">/${totalDays}天</span>`
+      : `<span class="current">${filled.length}</span><span class="total">/${totalDays}天</span>`;
+    const metaLeft = hasGoal ? `达标率 ${rateVal}%` : `记录率 ${rateVal}%`;
+    const metaRight = filled.length
+      ? `平均 ${avg} 千卡/天 · 合计 ${sum} 千卡`
+      : '本区间暂无记录';
+
+    return `<div class="stats-item-row quant-row diet-stats-row${isTotal ? ' total' : ''}" onclick="openTrendModal('${item.id}')" style="cursor:pointer" title="点击查看趋势大图">
+        <div class="stats-item-header">
+          <span class="stats-item-name">${escapeHtml(m.name)}${targetTag}</span>
+          <span class="stats-item-freq">${freq}</span>
+        </div>
+        <div class="stats-item-bar">
+          <div class="stats-item-bar-fill" style="width:${Math.min(100, rateVal)}%; background:${color};"></div>
+        </div>
+        ${renderTrendSvg(item, daily)}
+        <div class="stats-item-meta">
+          <span>${metaLeft}</span>
+          <span class="quant-sum">${metaRight}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `<div class="stats-category-card">
+      <div class="category-header">
+        <span class="category-name">${escapeHtml(cat.name)}</span>
       </div>
       ${rows}
     </div>`;
@@ -4398,15 +4500,18 @@ function fmtNum(v) {
 }
 
 function openTrendModal(itemId) {
-  const item = getItemById(itemId);
-  if (!item || !isQuantItem(item)) return;
+  // 饮食三餐是伪 item（id 形如 diet_breakfast），走同一套趋势图
+  const item = resolveTrendItem(itemId);
+  if (!item) return;
+  if (!isQuantItem(item) && !item.dietMeal) return;
   const range = getPeriodRange(currentPeriod, statsOffset);
   const days = dailyValuesInRange(item, range.start, range.end);
   const cfg = item.quant;
+  const hasTarget = cfg.target !== null && cfg.target !== undefined && cfg.target !== '' && isFinite(Number(cfg.target));
   const hitFn = (cfg.compare === 'lte') ? (v => v <= cfg.target) : (v => v >= cfg.target);
   // 统计只看「有填」的天，没填的不参与平均/最高/最低
   const filled = days.map(d => d.value).filter(v => v != null);
-  const hitDays = filled.filter(v => hitFn(v)).length;
+  const hitDays = hasTarget ? filled.filter(v => hitFn(v)).length : 0;
   const sum = filled.reduce((a, b) => a + b, 0);
   const avg = filled.length ? sum / filled.length : 0;
   const max = filled.length ? Math.max.apply(null, filled) : 0;
@@ -4417,12 +4522,15 @@ function openTrendModal(itemId) {
          <span>平均 ${fmtNum(avg)} ${escapeHtml(cfg.unit)}</span>
          <span>最高 ${fmtNum(max)}</span>
          <span>最低 ${fmtNum(min)}</span>
-         <span>达标 ${hitDays}/${filled.length} 天</span>
+         ${hasTarget ? `<span>达标 ${hitDays}/${filled.length} 天</span>` : ''}
        </div>`
     : `<div class="trend-empty trend-empty-lg">本区间还没有记录</div>`;
 
   const dirWord = (cfg.compare === 'lte') ? '低于此线达标' : '高于此线达标';
-  openEditModal(`${item.name} · 趋势`, `${range.label} · 目标 ${cfg.target} ${cfg.unit}/天 · ${dirWord}`,
+  const subTitle = hasTarget
+    ? `${range.label} · 目标 ${cfg.target} ${cfg.unit}/天 · ${dirWord}`
+    : `${range.label} · 未设目标 · 只看摄入走势`;
+  openEditModal(`${item.name} · 趋势`, subTitle,
     `${renderTrendSvgLarge(item, days)}${summaryHtml}`,
     { type: 'trendView' }, '关闭');
 }
@@ -4457,15 +4565,15 @@ function renderTrendSvgLarge(item, days) {
   });
 
   // 达标区：gte 在目标线以上、lte 在以下，淡绿一层，方向区别一眼可见
-  const zoneRect = goodZoneRect(target, minV, maxV, goodAbove, y);
+  const zoneRect = hasTargetVal ? goodZoneRect(target, minV, maxV, goodAbove, y) : null;
   const zone = zoneRect
     ? `<rect x="${padL}" y="${zoneRect.top.toFixed(1)}" width="${plotW}" height="${zoneRect.height.toFixed(1)}" fill="#059669" opacity="0.07"/>`
     : '';
 
   const hitFn = goodAbove ? (v => v >= target) : (v => v <= target);
   const dots = filled.map(p => {
-    const hit = hitFn(p.v);
-    return `<circle cx="${x(p.i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="3.4" fill="${hit ? '#059669' : '#d97706'}" stroke="#fff" stroke-width="1.5"/>`;
+    const dotColor = !hasTargetVal ? '#4f46e5' : (hitFn(p.v) ? '#059669' : '#d97706');
+    return `<circle cx="${x(p.i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="3.4" fill="${dotColor}" stroke="#fff" stroke-width="1.5"/>`;
   }).join('');
 
   let path = '';
