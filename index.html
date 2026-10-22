@@ -1775,11 +1775,33 @@ body {
 <div data-page-node-id="pIKBDY9xzUFsMNYwvzMYYt" class="toast" id="toast"></div>
 
 <script data-page-node-id="PqHExR5XTp3gCDBHWbN5Pi" data-pnid-children="hmPndJtjq4HWNksaQ2OLG9">
+// ============================================================================
+// 每日打卡 · 单文件应用（无构建、无依赖，直接部署到 GitHub Pages）
+//
+// 命名约定：
+//   render* / draw*   只读渲染，不写 state
+//   open* / close*    开 / 关弹窗，写 ui.modal 与 ui.diet.*
+//   toggle* / add* / remove* / move* / archive* / restore* / set*
+//                     写操作：只负责改 state 与 saveData，不自己挑要刷新哪个视图
+//   get* / is* / fmt* 纯函数，无副作用
+//
+// 状态约定：
+//   state   业务数据，会进本地缓存 / 云同步 / JSON 备份，字段变更必须走 ensureStateShape
+//   ui      界面状态，只决定怎么显示，不进同步
+//   sync    登录会话与同步节奏
+//
+// 分区按 01~16 编号，改哪块先跳到对应 banner。
+// 改完必须跑 node tests/run.js，全绿才算完成。
+// ============================================================================
 // ===== Data Layer =====
-function getStorageKey() {
-  return currentUser ? `checkin_app_data_${currentUser.id}` : STORAGE_KEY;
-}
+/* ==========================================================================
+   01 · 数据层：state 结构 · 本地存取 · 默认数据
+   state 的字段变更请同步改 ensureStateShape
+   ========================================================================== */
 const STORAGE_KEY = 'checkin_app_data';
+function getStorageKey() {
+  return sync.user ? `checkin_app_data_${sync.user.id}` : STORAGE_KEY;
+}
 const ICONS = [
   // 饮食
   '💧','🥛','🍵','☕','🧃','🥤','🍷','🍺','🥗','🥦',
@@ -1819,6 +1841,30 @@ let state = {
   dietGoals: { breakfast: 500, lunch: 700, dinner: 600, total: 2000 }, // 每餐热量目标（千卡），null = 不设目标
   dietMealNotes: {}, // { "2026-08-10": { breakfast: "备注" } } 每餐备注，与普通打卡项备注同构
   dietRemoved: false // 用户彻底删除饮食分类后置 true，避免 ensureDietCategory 又把它建回来
+};
+
+// ===== 界面状态：只决定「怎么显示」，不进云同步、不进导出 =====
+const ui = {
+  date: new Date(),                       // 打卡页当前查看的日期
+  period: 'week',                         // 统计周期：week | month | year | custom
+  statsOffset: 0,                         // 0 = 当前周期，-1 = 上一周期
+  customRange: { start: '', end: '' },    // period === 'custom' 时生效
+  calMonth: new Date(),                   // 日历当前月份
+  calendarOpen: false,
+  icon: ICONS[0],                         // 新建分类时选中的图标
+  foodFilter: 'all',                      // 食物库筛选：all | drink | food
+  modal: null,                            // 通用弹窗上下文 { type, catId, itemId, ... }
+  diet: { meal: 'lunch', view: 'detail', kw: '' } // 记账弹窗：餐次 / 视图 / 搜索词
+};
+
+// ===== 同步状态：登录会话与云同步节奏，与业务数据无关 =====
+const sync = {
+  user: null,      // { id, email, token }
+  timer: null,     // 定时拉取句柄
+  pushTimer: null, // 推送防抖句柄
+  inFlight: false, // 是否正在同步，用于防重入
+  lastAt: 0,       // 上次同步成功时间戳
+  mode: 'login'    // 'login' | 'register'
 };
 
 // 统一补全 state 结构：旧本地缓存 / 旧 JSON 备份 / 云端旧记录都可能缺 foods / diets / dietGoals
@@ -1876,11 +1922,6 @@ function isDietCat(cat) { return !!(cat && cat.builtin === 'diet'); }
 function getDietCat() { return (state.categories || []).find(c => isDietCat(c)) || null; }
 function isCatEnabled(cat) { return !cat || cat.enabled !== false; }
 
-let currentDate = new Date();
-let currentPeriod = 'week';
-let selectedIcon = ICONS[0];
-let calMonth = new Date();
-let calendarOpen = false;
 
 function loadData() {
   const saved = localStorage.getItem(getStorageKey());
@@ -1960,14 +2001,12 @@ const SUPABASE_ANON_KEY = 'sb_publishable_tkJEszfUG7UXJxjvRPiuIw_QjpjJ2Ay';
 const AUTH_SESSION_KEY = 'checkin_session';
 const AUTH_USER_KEY = 'checkin_user';
 
-let currentUser = null; // { id, email, token }
-let syncTimer = null;
-let pushDebounceTimer = null;
-let isSyncing = false;
-let lastSyncTime = 0;
-let authMode = 'login'; // 'login' or 'register'
 
-// ===== Password Hashing (Web Crypto API) =====
+/* ==========================================================================
+   02 · 认证：密码哈希 · 登录注册 · 会话
+   只碰 app_users 表与本地 session，不碰业务数据
+   ========================================================================== */
+
 async function hashPassword(password, salt) {
   const encoder = new TextEncoder();
   const data = encoder.encode(salt + password);
@@ -2002,17 +2041,17 @@ function getAuthUser() {
 function setAuthSession(user) {
   localStorage.setItem(AUTH_SESSION_KEY, user.token);
   localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
-  currentUser = user;
+  sync.user = user;
 }
 
 function clearAuthSession() {
   localStorage.removeItem(AUTH_SESSION_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
-  currentUser = null;
+  sync.user = null;
 }
 
 function switchAuthMode(mode) {
-  authMode = mode;
+  sync.mode = mode;
   const btn = document.getElementById('authBtn');
   const subtitle = document.getElementById('authSubtitle');
   const toggle = document.getElementById('authToggle');
@@ -2050,7 +2089,7 @@ async function handleAuth() {
   }
 
   btn.disabled = true;
-  btn.textContent = authMode === 'register' ? '注册中...' : '登录中...';
+  btn.textContent = sync.mode === 'register' ? '注册中...' : '登录中...';
   errEl.textContent = '';
 
   try {
@@ -2060,7 +2099,7 @@ async function handleAuth() {
       'Content-Type': 'application/json'
     };
 
-    if (authMode === 'register') {
+    if (sync.mode === 'register') {
       // Check if email already exists
       const checkUrl = `${SUPABASE_URL}/rest/v1/app_users?email=eq.${encodeURIComponent(email)}&select=id`;
       const checkRes = await fetch(checkUrl, { headers });
@@ -2130,28 +2169,28 @@ async function handleAuth() {
   } catch(e) {
     errEl.textContent = e.message || '操作失败，请重试';
     btn.disabled = false;
-    btn.textContent = authMode === 'register' ? '注册' : '登录';
+    btn.textContent = sync.mode === 'register' ? '注册' : '登录';
   }
 }
 
 async function signOutUser() {
   if (!confirm('确定退出登录吗？')) return;
   // Optionally clear session token on server
-  if (currentUser) {
+  if (sync.user) {
     const headers = {
       'apikey': SUPABASE_ANON_KEY,
       'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       'Content-Type': 'application/json'
     };
-    fetch(`${SUPABASE_URL}/rest/v1/app_users?id=eq.${currentUser.id}`, {
+    fetch(`${SUPABASE_URL}/rest/v1/app_users?id=eq.${sync.user.id}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ session_token: null })
     }).catch(() => {});
   }
   clearAuthSession();
-  if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
-  if (currentUser) localStorage.removeItem(`checkin_app_data_${currentUser.id}`);
+  if (sync.timer) { clearInterval(sync.timer); sync.timer = null; }
+  if (sync.user) localStorage.removeItem(`checkin_app_data_${sync.user.id}`);
   state = { categories: [], records: {} };
   document.getElementById('authOverlay').classList.remove('hidden');
   document.getElementById('authEmail').value = '';
@@ -2163,14 +2202,18 @@ async function signOutUser() {
 function enterApp() {
   document.getElementById('authOverlay').classList.add('hidden');
   const badge = document.getElementById('userBadge');
-  if (currentUser && currentUser.email) {
-    badge.textContent = currentUser.email;
-    badge.title = currentUser.email;
+  if (sync.user && sync.user.email) {
+    badge.textContent = sync.user.email;
+    badge.title = sync.user.email;
   }
   initApp();
 }
 
 // ===== Cloud Sync (user-isolated via session token) =====
+/* ==========================================================================
+   03 · 云同步：拉取 / 推送 / 状态显示
+   整包 JSONB 覆盖式同步，1.5s 防抖
+   ========================================================================== */
 function updateSyncStatus(status, text) {
   const dot = document.getElementById('syncDot');
   const txt = document.getElementById('syncText');
@@ -2190,9 +2233,9 @@ function authHeaders() {
 }
 
 async function fetchCloudData() {
-  if (!currentUser) return null;
+  if (!sync.user) return null;
   try {
-    const url = `${SUPABASE_URL}/rest/v1/checkin_data?user_key=eq.${encodeURIComponent(currentUser.id)}&select=data,updated_at`;
+    const url = `${SUPABASE_URL}/rest/v1/checkin_data?user_key=eq.${encodeURIComponent(sync.user.id)}&select=data,updated_at`;
     const res = await fetch(url, { headers: authHeaders() });
     if (!res.ok) return null;
     const rows = await res.json();
@@ -2204,13 +2247,13 @@ async function fetchCloudData() {
 }
 
 async function pushCloudData() {
-  if (!currentUser || isSyncing) return false;
-  isSyncing = true;
+  if (!sync.user || sync.inFlight) return false;
+  sync.inFlight = true;
   updateSyncStatus('syncing', '同步中...');
   try {
     const url = `${SUPABASE_URL}/rest/v1/checkin_data?on_conflict=user_key`;
     const payload = {
-      user_key: currentUser.id,
+      user_key: sync.user.id,
       data: state,
       updated_at: new Date().toISOString()
     };
@@ -2219,30 +2262,30 @@ async function pushCloudData() {
       headers: { ...authHeaders(), 'Prefer': 'resolution=merge-duplicates' },
       body: JSON.stringify(payload)
     });
-    isSyncing = false;
+    sync.inFlight = false;
     if (res.ok) {
       updateSyncStatus('online', '已同步');
-      lastSyncTime = Date.now();
+      sync.lastAt = Date.now();
       return true;
     } else {
       updateSyncStatus('offline', '同步失败');
       return false;
     }
   } catch(e) {
-    isSyncing = false;
+    sync.inFlight = false;
     updateSyncStatus('offline', '网络错误');
     return false;
   }
 }
 
 function scheduleCloudPush() {
-  if (!currentUser) return;
-  if (pushDebounceTimer) clearTimeout(pushDebounceTimer);
-  pushDebounceTimer = setTimeout(() => pushCloudData(), 1500);
+  if (!sync.user) return;
+  if (sync.pushTimer) clearTimeout(sync.pushTimer);
+  sync.pushTimer = setTimeout(() => pushCloudData(), 1500);
 }
 
 async function syncFromCloud() {
-  if (!currentUser || isSyncing) return;
+  if (!sync.user || sync.inFlight) return;
   updateSyncStatus('syncing', '同步中...');
   const cloudRow = await fetchCloudData();
   if (!cloudRow) {
@@ -2278,18 +2321,18 @@ async function syncFromCloud() {
   } else {
     updateSyncStatus('online', '已同步');
   }
-  lastSyncTime = Date.now();
+  sync.lastAt = Date.now();
 }
 
 function startPeriodicSync() {
-  if (syncTimer) clearInterval(syncTimer);
-  syncTimer = setInterval(() => {
-    if (currentUser && document.visibilityState === 'visible') {
+  if (sync.timer) clearInterval(sync.timer);
+  sync.timer = setInterval(() => {
+    if (sync.user && document.visibilityState === 'visible') {
       syncFromCloud();
     }
   }, 30000);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && currentUser) {
+    if (document.visibilityState === 'visible' && sync.user) {
       syncFromCloud();
     }
   });
@@ -2297,14 +2340,14 @@ function startPeriodicSync() {
 
 function renderCloudStatus() {
   const statusDisplay = document.getElementById('cloudStatusDisplay');
-  if (currentUser) {
+  if (sync.user) {
     statusDisplay.innerHTML = `
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
         <span class="cloud-status-badge enabled">✅ 已登录</span>
         <button class="btn btn-danger" onclick="signOutUser()">退出登录</button>
       </div>
       <div style="font-size:13px; color:var(--text-muted);">
-        当前账号: <code>${escapeHtml(currentUser.email)}</code><br>
+        当前账号: <code>${escapeHtml(sync.user.email)}</code><br>
         数据自动云端同步，多设备登录即可同步
       </div>
     `;
@@ -2314,6 +2357,9 @@ function renderCloudStatus() {
   }
 }
 
+/* ==========================================================================
+   04 · 通用工具：id · 日期 · tab 切换
+   ========================================================================== */
 function genId(prefix) {
   return prefix + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
 }
@@ -2359,7 +2405,10 @@ function switchTab(tab) {
   if (tab === 'foods') renderFoods();
 }
 
-// ===== Checkin Tab =====
+/* ==========================================================================
+   05 · 打卡页：日期栏 · 日历 · 进度 · 分类卡片
+   ========================================================================== */
+
 // ---- Quant helpers ----
 function isQuantItem(item) {
   return !!(item && item.quant && item.quant.unit != null && item.quant.target != null);
@@ -2421,7 +2470,7 @@ function getDayDoneIds(dateKey) {
 }
 
 function setNote(itemId, note) {
-  const dateKey = formatDate(currentDate);
+  const dateKey = formatDate(ui.date);
   const item = getItemById(itemId);
   if (!item) return;
   if (!state.records[dateKey]) state.records[dateKey] = [];
@@ -2443,23 +2492,23 @@ function setNote(itemId, note) {
 }
 
 function changeDate(delta) {
-  currentDate.setDate(currentDate.getDate() + delta);
+  ui.date.setDate(ui.date.getDate() + delta);
   renderCheckin();
 }
 
 function goToday() {
-  currentDate = new Date();
-  calMonth = new Date();
+  ui.date = new Date();
+  ui.calMonth = new Date();
   renderCheckin();
 }
 
 // ===== Calendar =====
 function toggleCalendar() {
-  calendarOpen = !calendarOpen;
+  ui.calendarOpen = !ui.calendarOpen;
   const wrap = document.getElementById('calendarWrap');
   const btn = document.getElementById('calToggleBtn');
-  if (calendarOpen) {
-    calMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  if (ui.calendarOpen) {
+    ui.calMonth = new Date(ui.date.getFullYear(), ui.date.getMonth(), 1);
     renderCalendar();
     wrap.style.display = 'block';
     btn.style.background = 'var(--primary-light)';
@@ -2470,7 +2519,7 @@ function toggleCalendar() {
 }
 
 function changeCalMonth(delta) {
-  calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + delta, 1);
+  ui.calMonth = new Date(ui.calMonth.getFullYear(), ui.calMonth.getMonth() + delta, 1);
   renderCalendar();
 }
 
@@ -2489,14 +2538,14 @@ function dayCheckinCount(dateKey) {
 
 function renderCalendar() {
   const label = document.getElementById('calMonthLabel');
-  label.textContent = `${calMonth.getFullYear()}年${calMonth.getMonth() + 1}月`;
+  label.textContent = `${ui.calMonth.getFullYear()}年${ui.calMonth.getMonth() + 1}月`;
 
   const grid = document.getElementById('calendarGrid');
-  const year = calMonth.getFullYear(), month = calMonth.getMonth();
+  const year = ui.calMonth.getFullYear(), month = ui.calMonth.getMonth();
   const firstDow = new Date(year, month, 1).getDay() || 7; // Mon=1..Sun=7
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const todayKey = formatDate(new Date());
-  const curKey = formatDate(currentDate);
+  const curKey = formatDate(ui.date);
 
   let html = ['周一','周二','周三','周四','周五','周六','周日'].map(w =>
     `<div class="cal-weekday">${w}</div>`).join('');
@@ -2526,15 +2575,15 @@ function renderCalendar() {
 }
 
 function selectCalDate(dateKey) {
-  currentDate = parseDate(dateKey);
+  ui.date = parseDate(dateKey);
   // Keep calendar open; user closes it by clicking the 📅 button again
-  calMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  ui.calMonth = new Date(ui.date.getFullYear(), ui.date.getMonth(), 1);
   renderCalendar();
   renderCheckin();
 }
 
 function toggleCheckin(itemId) {
-  const dateKey = formatDate(currentDate);
+  const dateKey = formatDate(ui.date);
   const item = getItemById(itemId);
   if (isQuantItem(item)) {
     // Quant items open the value input instead
@@ -2554,7 +2603,7 @@ function toggleCheckin(itemId) {
 }
 
 function setQuantValue(itemId, value) {
-  const dateKey = formatDate(currentDate);
+  const dateKey = formatDate(ui.date);
   const num = Number(value);
   if (!state.records[dateKey]) state.records[dateKey] = [];
   const list = state.records[dateKey];
@@ -2592,14 +2641,46 @@ function getStreak(itemId) {
   return streak;
 }
 
+// 打卡页的一行。普通项 / 量化项 / 饮食餐次三者结构完全一样：
+// 勾选框 + 名称 + 行内备注 + 右侧（数值徽章 · 连续天数 · 备注按钮）。
+// 差异只用参数表达：extraClass 区分饮食，badge 有无区分是否量化，onclick 决定点了做什么。
+function checkinRowHtml(o) {
+  const cls = ['checkin-item', o.extraClass, o.rowClass]
+    .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  const badge = o.badge == null ? ''
+    : `<span class="quant-badge ${o.badgeClass || ''}">${o.badge}</span>`;
+  const streak = (o.streak || 0) >= 2 ? `<span class="checkin-streak">🔥 ${o.streak}天</span>` : '';
+  return `<div class="${cls}" onclick="${o.onclick}">
+        <div class="checkin-checkbox">
+          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </div>
+        <span class="checkin-item-name">${escapeHtml(o.name)}</span>
+        ${o.noteText || ''}
+        <div class="checkin-right">
+          ${badge}
+          ${streak}
+          ${o.noteBtn || ''}
+        </div>
+      </div>`;
+}
+
+// 行内备注：小字文本 + 💬 按钮。三处行渲染共用同一套取值与转义，避免哪一处漏转义。
+function checkinNoteParts(note, btnOnclick) {
+  const tip = note ? escapeHtml(note).replace(/"/g, '&quot;') : '添加备注';
+  return {
+    text: note ? `<span class="checkin-note" title="${tip}">${escapeHtml(note)}</span>` : '',
+    btn: `<span class="note-btn ${note ? 'has' : ''}" title="${tip}" onclick="event.stopPropagation(); ${btnOnclick}">💬</span>`
+  };
+}
+
 function renderCheckin() {
   // Date bar
-  document.getElementById('dayLabel').textContent = getDayLabel(currentDate);
+  document.getElementById('dayLabel').textContent = getDayLabel(ui.date);
   document.getElementById('dateValue').textContent =
-    `${currentDate.getMonth() + 1}月${currentDate.getDate()}日`;
-  document.getElementById('todayBtn').disabled = isToday(currentDate);
+    `${ui.date.getMonth() + 1}月${ui.date.getDate()}日`;
+  document.getElementById('todayBtn').disabled = isToday(ui.date);
 
-  const dateKey = formatDate(currentDate);
+  const dateKey = formatDate(ui.date);
 
   // 归档的、被停用的、开始日期未到的分类都不出现在打卡页
   const activeCats = state.categories.filter(c =>
@@ -2651,42 +2732,19 @@ function renderCheckin() {
       const rec = dayRecs.find(r => r.id === item.id);
       const isCheckedNow = rec ? isChecked(rec) : false;
       const isDoneNow = rec ? isDone(rec, item) : false;
-      const streak = getStreak(item.id);
-      const hasNote = !!(rec && rec.note);
-      const noteTip = hasNote ? escapeHtml(rec.note).replace(/"/g, '&quot;') : '添加备注';
-      // note text shown inline next to name (small font), 💬 always at far right
-      const noteText = hasNote ? `<span class="checkin-note" title="${noteTip}">${escapeHtml(rec.note)}</span>` : '';
-      const noteBtn = `<span class="note-btn ${hasNote ? 'has' : ''}" title="${noteTip}" onclick="event.stopPropagation(); openNoteModal('${item.id}')">💬</span>`;
-      if (isQuantItem(item)) {
-        const val = rec ? rec.value : 0;
-        const target = item.quant.target;
-        const unit = item.quant.unit;
-        const doneClass = isDoneNow ? 'done' : (isCheckedNow ? 'partial' : '');
-        html += `<div class="checkin-item ${isCheckedNow ? 'checked' : ''} ${doneClass}" onclick="openQuantInput('${item.id}')">
-          <div class="checkin-checkbox">
-            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </div>
-          <span class="checkin-item-name">${escapeHtml(item.name)}</span>
-          ${noteText}
-          <div class="checkin-right">
-            <span class="quant-badge ${isDoneNow ? 'ok' : (isCheckedNow ? 'low' : '')}">${val}/${target} ${escapeHtml(unit)}</span>
-            ${streak >= 2 ? `<span class="checkin-streak">🔥 ${streak}天</span>` : ''}
-            ${noteBtn}
-          </div>
-        </div>`;
-      } else {
-        html += `<div class="checkin-item ${isCheckedNow ? 'checked' : ''}" onclick="toggleCheckin('${item.id}')">
-          <div class="checkin-checkbox">
-            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </div>
-          <span class="checkin-item-name">${escapeHtml(item.name)}</span>
-          ${noteText}
-          <div class="checkin-right">
-            ${streak >= 2 ? `<span class="checkin-streak">🔥 ${streak}天</span>` : ''}
-            ${noteBtn}
-          </div>
-        </div>`;
-      }
+      const quant = isQuantItem(item);
+      const noteParts = checkinNoteParts(rec && rec.note ? rec.note : '', `openNoteModal('${item.id}')`);
+      const val = rec ? rec.value : 0;
+      html += checkinRowHtml({
+        name: item.name,
+        rowClass: `${isCheckedNow ? 'checked' : ''} ${quant ? (isDoneNow ? 'done' : (isCheckedNow ? 'partial' : '')) : ''}`,
+        noteText: noteParts.text,
+        noteBtn: noteParts.btn,
+        streak: getStreak(item.id),
+        badge: quant ? `${val}/${item.quant.target} ${escapeHtml(item.quant.unit)}` : null,
+        badgeClass: quant ? (isDoneNow ? 'ok' : (isCheckedNow ? 'low' : '')) : '',
+        onclick: quant ? `openQuantInput('${item.id}')` : `toggleCheckin('${item.id}')`
+      });
     });
     html += `</div>`;
   });
@@ -2694,11 +2752,10 @@ function renderCheckin() {
   list.innerHTML = html;
 }
 
-// ===== Stats Tab =====
-let statsOffset = 0; // 0 = current period, -1 prev, +1 next
+/* ==========================================================================
+   06 · 统计：周期区间计算
+   ========================================================================== */
 
-// 自定义统计区间（currentPeriod === 'custom' 时生效）
-let customRange = { start: '', end: '' };
 
 function fmtDateInput(d) {
   const y = d.getFullYear();
@@ -2708,23 +2765,23 @@ function fmtDateInput(d) {
 }
 
 function switchPeriod(period) {
-  currentPeriod = period;
-  statsOffset = 0;
+  ui.period = period;
+  ui.statsOffset = 0;
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector(`.period-btn[data-period="${period}"]`);
   if (btn) btn.classList.add('active');
 
   if (period === 'custom') {
-    if (!customRange.start || !customRange.end) {
+    if (!ui.customRange.start || !ui.customRange.end) {
       const end = new Date(); end.setHours(0, 0, 0, 0);
       const start = new Date(end); start.setDate(end.getDate() - 29);
-      customRange.start = fmtDateInput(start);
-      customRange.end = fmtDateInput(end);
+      ui.customRange.start = fmtDateInput(start);
+      ui.customRange.end = fmtDateInput(end);
     }
     const sEl = document.getElementById('statsCustomStart');
     const eEl = document.getElementById('statsCustomEnd');
-    if (sEl) sEl.value = customRange.start;
-    if (eEl) eEl.value = customRange.end;
+    if (sEl) sEl.value = ui.customRange.start;
+    if (eEl) eEl.value = ui.customRange.end;
   }
   renderStats();
 }
@@ -2736,19 +2793,19 @@ function applyStatsCustomRange() {
   const ev = (eEl && eEl.value) || '';
   if (!sv || !ev) { showToast('请选择开始和结束日期'); return; }
   if (sv > ev) { showToast('开始日期不能晚于结束日期'); return; }
-  customRange.start = sv;
-  customRange.end = ev;
-  statsOffset = 0;
+  ui.customRange.start = sv;
+  ui.customRange.end = ev;
+  ui.statsOffset = 0;
   renderStats();
 }
 
 function changeStatsOffset(delta) {
-  statsOffset += delta;
+  ui.statsOffset += delta;
   renderStats();
 }
 
 function resetStatsOffset() {
-  statsOffset = 0;
+  ui.statsOffset = 0;
   renderStats();
 }
 
@@ -2757,8 +2814,8 @@ function getPeriodRange(period, offset) {
   const now = new Date();
   let start, end, totalDays, label;
   if (period === 'custom') {
-    let s = customRange.start ? new Date(customRange.start + 'T00:00:00') : null;
-    let e = customRange.end ? new Date(customRange.end + 'T00:00:00') : null;
+    let s = ui.customRange.start ? new Date(ui.customRange.start + 'T00:00:00') : null;
+    let e = ui.customRange.end ? new Date(ui.customRange.end + 'T00:00:00') : null;
     if (!s || isNaN(s.getTime())) s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
     if (!e || isNaN(e.getTime())) e = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     if (s > e) { const t = s; s = e; e = t; }
@@ -2838,6 +2895,9 @@ function sumValueInRange(item, start, end) {
 // Daily quant values in range -> [{key, value}]
 // value 为数字 = 当天有填；null = 没填（绝不能当成 0，否则体重折线会一路掉到 0）
 // 默认裁掉「今天之后」的日期：还没到的日子不该出现在折线里
+/* ==========================================================================
+   07 · 趋势图：取值 · 刻度 · 小图绘制
+   ========================================================================== */
 function dailyValuesInRange(item, start, end, opts) {
   const trimFuture = !(opts && opts.trimFuture === false);
   const today = new Date();
@@ -2993,8 +3053,12 @@ function goodZoneRect(target, minV, maxV, goodAbove, y) {
 }
 
 // SVG line chart (no external deps); supports negative values and compare direction
-function renderTrendSvg(item, days) {
-  const W = 300, H = 64, padL = 30, padB = 14, padT = 8, padR = 8;
+// 折线图：统计页行内小图与趋势弹窗大图共用一套绘制。
+// 二者算法与配色完全一致，差异只在尺寸、装饰（网格 / 刻度 / 日期轴）和文案措辞。
+function renderTrendSvg(item, days, opts) {
+  const big = !!(opts && opts.large);
+  const W = big ? 620 : 300, H = big ? 260 : 64;
+  const padL = big ? 54 : 30, padB = big ? 32 : 14, padT = big ? 22 : 8, padR = big ? 16 : 8;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const target = item.quant.target;
   const cmp = (item.quant && item.quant.compare) || 'gte';
@@ -3004,8 +3068,8 @@ function renderTrendSvg(item, days) {
   const filled = days.map((d, i) => ({ i: i, v: d.value })).filter(p => p.v != null);
   // 一条记录都没有、又没有目标值时确实无图可画；只要设了目标，图照样画出来
   const hasTargetVal = target !== null && target !== undefined && target !== '' && isFinite(Number(target));
-  if (filled.length === 0 && !hasTargetVal) {
-    return `<div class="trend-empty">本区间暂无记录</div>`;
+  if (n === 0 || (filled.length === 0 && !hasTargetVal)) {
+    return `<div class="trend-empty${big ? ' trend-empty-lg' : ''}">本区间暂无记录</div>`;
   }
 
   const rng = chartRange(filled.map(p => p.v), target, { ticks: 4, goodAbove });
@@ -3014,26 +3078,44 @@ function renderTrendSvg(item, days) {
   const x = i => padL + (n <= 1 ? plotW / 2 : i * plotW / (n - 1));
   const y = v => padT + plotH - ((v - minV) / range) * plotH;
 
+  // 左侧刻度（仅大图）：步长已取整到 1/2/2.5/5×10^k，标签不会是 6.85 这类长小数
+  let grid = '';
+  if (big) {
+    rng.ticks.forEach(v => {
+      const gy = y(v).toFixed(1);
+      const zero = Math.abs(v) < 1e-9;
+      grid += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="${zero ? '#d1d5db' : '#e5e7eb'}" stroke-width="${zero ? 0.9 : 0.5}"/>`;
+      grid += `<text x="${padL - 8}" y="${gy}" text-anchor="end" dominant-baseline="central" font-size="10" fill="#9ca3af">${fmtTick(v, rng.step)}</text>`;
+    });
+  }
+
+  // 达标区：gte 在目标线以上、lte 在以下，淡绿一层，方向区别一眼可见
   const zoneRect = hasTargetVal ? goodZoneRect(target, minV, maxV, goodAbove, y) : null;
   const zone = zoneRect
-    ? `<rect x="${padL}" y="${zoneRect.top.toFixed(1)}" width="${plotW}" height="${zoneRect.height.toFixed(1)}" fill="#059669" opacity="0.09"/>`
+    ? `<rect x="${padL}" y="${zoneRect.top.toFixed(1)}" width="${plotW}" height="${zoneRect.height.toFixed(1)}" fill="#059669" opacity="${big ? 0.07 : 0.09}"/>`
     : '';
 
-  // 目标线：只要设了目标就一定画出来（视野里始终包含目标，不再有「超出显示范围」的空图）
-  let targetLine = '', labelY = padT + plotH - 1, targetLabel = '';
+  // 目标线：设了目标就一定画出来（视野里始终包含目标，不再有「超出显示范围」的空图）
+  const dirArrow = goodAbove ? '↑' : '↓';
+  let targetLine = '', targetLabel = '';
   if (hasTargetVal && rng.targetInView) {
     const ty = y(Number(target)).toFixed(1);
     const tyNum = Number(ty);
-    labelY = (tyNum - 4) < (padT + 5) ? (tyNum + 9) : (tyNum - 4);
-    targetLine = `<line x1="${padL}" y1="${ty}" x2="${W - padR}" y2="${ty}" stroke="#dc2626" stroke-width="1" stroke-dasharray="4 3" opacity="0.75"/>`;
-    targetLabel = `<text x="${W - padR}" y="${labelY}" text-anchor="end" font-size="9" fill="#dc2626" opacity="0.9" paint-order="stroke" stroke="#fff" stroke-width="2.6" stroke-linejoin="round">目标 ${target} ${goodAbove ? '↑' : '↓'}</text>`;
+    const labelY = big
+      ? ((tyNum - 6) < (padT + 8) ? (tyNum + 14) : (tyNum - 6))
+      : ((tyNum - 4) < (padT + 5) ? (tyNum + 9) : (tyNum - 4));
+    targetLine = `<line x1="${padL}" y1="${ty}" x2="${W - padR}" y2="${ty}" stroke="#dc2626" stroke-width="${big ? 1.2 : 1}" stroke-dasharray="${big ? '5 4' : '4 3'}" opacity="${big ? 0.85 : 0.75}"/>`;
+    targetLabel = big
+      ? `<text x="${W - padR}" y="${labelY}" text-anchor="end" font-size="10" fill="#dc2626" paint-order="stroke" stroke="#fff" stroke-width="3" stroke-linejoin="round">${dirArrow} 目标 ${target} ${goodAbove ? '以上达标' : '以下达标'}</text>`
+      : `<text x="${W - padR}" y="${labelY}" text-anchor="end" font-size="9" fill="#dc2626" opacity="0.9" paint-order="stroke" stroke="#fff" stroke-width="2.6" stroke-linejoin="round">目标 ${target} ${dirArrow}</text>`;
   }
 
   const hitFn = goodAbove ? (v => v >= target) : (v => v <= target);
   const dots = filled.map(p => {
-    const px = x(p.i).toFixed(1), py = y(p.v).toFixed(1);
     const dotColor = !hasTargetVal ? '#4f46e5' : (hitFn(p.v) ? '#059669' : '#d97706');
-    return `<circle cx="${px}" cy="${py}" r="2.8" fill="${dotColor}" stroke="#fff" stroke-width="1"/>`;
+    return big
+      ? `<circle cx="${x(p.i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="3.4" fill="${dotColor}" stroke="#fff" stroke-width="1.5"/>`
+      : `<circle cx="${x(p.i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="2.8" fill="${dotColor}" stroke="#fff" stroke-width="1"/>`;
   }).join('');
 
   let path = '';
@@ -3042,39 +3124,53 @@ function renderTrendSvg(item, days) {
     path += (k === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`);
   });
 
-  return `<svg class="trend-svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">
-    ${zone}
-    ${targetLine}
-    <path d="${path}" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    ${dots}
-    ${targetLabel}
-  </svg>`;
+  // 日期轴（仅大图）：首 / 中 / 尾三个刻度，避免拥挤
+  let xLabels = '';
+  if (big) {
+    const idxs = n === 1 ? [0] : [0, Math.floor((n - 1) / 2), n - 1];
+    [...new Set(idxs)].forEach(idx => {
+      xLabels += `<text x="${x(idx).toFixed(1)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#9ca3af">${days[idx].key.slice(5)}</text>`;
+    });
+  }
+
+  const line = `<path d="${path}" fill="none" stroke="#4f46e5" stroke-width="${big ? 2.2 : 2}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  // 大图把目标文字压在折线下方绘制、小图压在最后：与重构前的图层顺序保持一致
+  const body = big
+    ? `${zone}${grid}${targetLine}${targetLabel}${line}${dots}${xLabels}`
+    : `${zone}${targetLine}${line}${dots}${targetLabel}`;
+
+  return big
+    ? `<svg class="trend-modal-svg" viewBox="0 0 ${W} ${H}" role="img">${body}</svg>`
+    : `<svg class="trend-svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${body}</svg>`;
 }
 
+/* ==========================================================================
+   08 · 统计页渲染：汇总三卡 + 分类卡片 + 趋势图
+   ========================================================================== */
 function renderStats() {
-  const { start, end, totalDays, label } = getPeriodRange(currentPeriod, statsOffset);
+  const { start, end, totalDays, label } = getPeriodRange(ui.period, ui.statsOffset);
 
   // 自定义区间：显示日期选择条，隐藏「上一/下一周期」（对自定义区间无意义）
   const customBox = document.getElementById('statsCustomRange');
-  if (customBox) customBox.style.display = currentPeriod === 'custom' ? 'flex' : 'none';
+  if (customBox) customBox.style.display = ui.period === 'custom' ? 'flex' : 'none';
   const navBox = document.querySelector('.stats-period-nav');
-  if (navBox) navBox.style.display = currentPeriod === 'custom' ? 'none' : 'flex';
-  if (currentPeriod === 'custom') {
+  if (navBox) navBox.style.display = ui.period === 'custom' ? 'none' : 'flex';
+  if (ui.period === 'custom') {
     const sEl = document.getElementById('statsCustomStart');
     const eEl = document.getElementById('statsCustomEnd');
-    if (sEl && !sEl.value) sEl.value = customRange.start;
-    if (eEl && !eEl.value) eEl.value = customRange.end;
+    if (sEl && !sEl.value) sEl.value = ui.customRange.start;
+    if (eEl && !eEl.value) eEl.value = ui.customRange.end;
   }
 
   // Update period nav label (‹ range ›); badge marks current period only
   const navLabel = document.getElementById('statsPeriodLabel');
   if (navLabel) {
-    const periodName = currentPeriod === 'week' ? '周'
-      : (currentPeriod === 'month' ? '月' : (currentPeriod === 'year' ? '年' : '自定义'));
-    const badge = (statsOffset === 0 && currentPeriod !== 'custom')
+    const periodName = ui.period === 'week' ? '周'
+      : (ui.period === 'month' ? '月' : (ui.period === 'year' ? '年' : '自定义'));
+    const badge = (ui.statsOffset === 0 && ui.period !== 'custom')
       ? `<span class="nav-badge">本${periodName}</span>` : '';
     navLabel.innerHTML = badge + label;
-    navLabel.title = statsOffset === 0 ? `当前${periodName}，点击无变化` : `点击回到当前${periodName}`;
+    navLabel.title = ui.statsOffset === 0 ? `当前${periodName}，点击无变化` : `点击回到当前${periodName}`;
   }
 
   // Summary only counts categories with countInStats enabled
@@ -3232,8 +3328,10 @@ function getTotalCount(itemId) {
   return count;
 }
 
-// ===== Generic Edit Modal =====
-let editModalState = null;
+/* ==========================================================================
+   09 · 通用弹窗：所有 open*Modal 共用一个壳
+   ========================================================================== */
+
 
 // 一键切换正负号（解决手机端数字键盘无负号键的问题）
 function toggleSign(id) {
@@ -3259,7 +3357,7 @@ function openEditModal(title, sub, bodyHtml, state, okLabel) {
   document.getElementById('editModalSub').textContent = sub || '';
   document.getElementById('editModalBody').innerHTML = bodyHtml;
   document.getElementById('editModalOk').textContent = okLabel || '确定';
-  editModalState = state;
+  ui.modal = state;
   document.getElementById('editModal').classList.add('show');
   const first = document.querySelector('#editModalBody input');
   if (first) setTimeout(() => first.focus(), 50);
@@ -3269,7 +3367,7 @@ function closeEditModal() {
   const modal = document.getElementById('editModal');
   modal.classList.remove('show');
   modal.classList.remove('diet-modal');
-  editModalState = null;
+  ui.modal = null;
 }
 
 function toggleQuantFields() {
@@ -3278,7 +3376,7 @@ function toggleQuantFields() {
 }
 
 function confirmEditModal() {
-  const s = editModalState;
+  const s = ui.modal;
   if (!s) return;
   if (s.type === 'editCat') {
     const v = document.getElementById('modalInput1').value.trim();
@@ -3390,7 +3488,7 @@ function confirmEditModal() {
     showToast(note.trim() ? '备注已保存' : '备注已清除');
   } else if (s.type === 'dietNote') {
     const note = document.getElementById('modalNote').value;
-    setDietMealNote(formatDate(currentDate), s.mealKey, note);
+    setDietMealNote(formatDate(ui.date), s.mealKey, note);
     showToast(note.trim() ? '备注已保存' : '备注已清除');
   } else if (s.type === 'setStartDate') {
     const date = document.getElementById('modalStartDate').value;
@@ -3406,6 +3504,9 @@ function confirmEditModal() {
 }
 
 // ===== Manage Tab =====
+/* ==========================================================================
+   10 · 分类管理页：分类 / 打卡项 / 归档 / 目标
+   ========================================================================== */
 function renderManage() {
   // Category list
   const list = document.getElementById('manageList');
@@ -3601,7 +3702,7 @@ function toggleCatEnabled(catId) {
 }
 
 function selectIcon(icon) {
-  selectedIcon = icon;
+  ui.icon = icon;
   renderManage();
 }
 
@@ -3669,10 +3770,10 @@ function setCategoryStartDate(catId) {
 function openNoteModal(itemId) {
   const item = getItemById(itemId);
   if (!item) return;
-  const dateKey = formatDate(currentDate);
+  const dateKey = formatDate(ui.date);
   const rec = getDayRecords(dateKey).find(r => r.id === itemId);
   const note = rec ? rec.note : '';
-  openEditModal(`${escapeHtml(item.name)} · 备注`, `${formatDate(currentDate)}`,
+  openEditModal(`${escapeHtml(item.name)} · 备注`, `${formatDate(ui.date)}`,
     `<textarea class="modal-input note-textarea" id="modalNote" rows="3" maxlength="200" placeholder="记录备注（可选，最多200字）">${escapeHtml(note)}</textarea>
      <div class="quant-input-tip">保存后，备注会显示在打卡项旁边（小字），💬 位于行最右侧</div>
      ${note ? `<button class="btn btn-danger btn-block" style="width:100%; margin-top:12px;" onclick="clearNoteNow()">🗑️ 删除备注</button>` : ''}`,
@@ -3680,7 +3781,7 @@ function openNoteModal(itemId) {
 }
 
 function clearNoteNow() {
-  const s = editModalState;
+  const s = ui.modal;
   if (s && s.type === 'note' && s.itemId) {
     setNote(s.itemId, '');
     showToast('备注已删除');
@@ -3691,7 +3792,7 @@ function clearNoteNow() {
 // 餐次备注：UI 与打卡项备注完全一致，只是把 itemId 换成 mealKey
 function openDietNoteModal(mealKey) {
   const m = dietMealMeta(mealKey);
-  const dateKey = formatDate(currentDate);
+  const dateKey = formatDate(ui.date);
   const note = getDietMealNote(dateKey, mealKey);
   openEditModal(`${m.name} · 备注`, `${dateKey}`,
     `<textarea class="modal-input note-textarea" id="modalNote" rows="3" maxlength="200" placeholder="记录备注（可选，最多200字）">${escapeHtml(note)}</textarea>
@@ -3701,7 +3802,7 @@ function openDietNoteModal(mealKey) {
 }
 
 function clearDietNoteNow(mealKey) {
-  setDietMealNote(formatDate(currentDate), mealKey, '');
+  setDietMealNote(formatDate(ui.date), mealKey, '');
   showToast('备注已删除');
   closeEditModal();
 }
@@ -3749,12 +3850,12 @@ function editItemConfig(catId, itemId) {
 function openQuantInput(itemId) {
   const item = getItemById(itemId);
   if (!item) return;
-  const dateKey = formatDate(currentDate);
+  const dateKey = formatDate(ui.date);
   const rec = getDayRecords(dateKey).find(r => r.id === itemId);
   const cur = rec ? rec.value : '';
   const goalText = `目标 ${item.quant.target} ${item.quant.unit}/天`;
   openEditModal(`${item.name} 打卡`,
-    `${formatDate(currentDate)} · ${goalText}`,
+    `${formatDate(ui.date)} · ${goalText}`,
     `     <div class="quant-input-row">
        <button type="button" class="sign-toggle" onclick="toggleSign('modalQuantValue')" title="切换正负号（±）" aria-label="切换正负号">±</button>
        <input class="modal-input" id="modalQuantValue" type="text" inputmode="decimal"
@@ -3894,8 +3995,11 @@ function permanentDeleteItem(catId, itemId) {
   showToast('打卡项已彻底删除');
 }
 
-// ===== Food (calorie library) Tab =====
-let foodFilter = 'all';
+/* ==========================================================================
+   11 · 食物热量库
+   kind: drink | food，作为记账时的取数来源
+   ========================================================================== */
+
 
 function foodKindLabel(kind) {
   return kind === 'drink' ? '🥤 饮品' : '🍱 食物';
@@ -3907,7 +4011,7 @@ function getFoods() {
 }
 
 // 品牌下拉：已有品牌可直接选 +「＋ 新建品牌」
-function refreshFoodBrandOptions() {
+function renderFoodBrandOptions() {
   const sel = document.getElementById('foodBrandSelect');
   if (!sel) return;
   const prev = sel.value;
@@ -3931,7 +4035,7 @@ function onFoodBrandChange() {
 }
 
 function setFoodFilter(kind) {
-  foodFilter = kind;
+  ui.foodFilter = kind;
   document.querySelectorAll('.food-filter-btn').forEach(b => {
     b.classList.toggle('active', b.getAttribute('data-food-filter') === kind);
   });
@@ -3941,11 +4045,11 @@ function setFoodFilter(kind) {
 function renderFoods() {
   const listEl = document.getElementById('foodList');
   if (!listEl) return;
-  refreshFoodBrandOptions();
+  renderFoodBrandOptions();
 
   const kw = ((document.getElementById('foodSearch') || {}).value || '').trim().toLowerCase();
   let foods = getFoods().slice();
-  if (foodFilter !== 'all') foods = foods.filter(f => (f.kind || 'food') === foodFilter);
+  if (ui.foodFilter !== 'all') foods = foods.filter(f => (f.kind || 'food') === ui.foodFilter);
   if (kw) {
     foods = foods.filter(f =>
       (f.brand || '').toLowerCase().includes(kw) || (f.name || '').toLowerCase().includes(kw));
@@ -4075,6 +4179,10 @@ function editFood(id) {
 }
 
 // ===== 饮食记录：三餐分餐 + 分餐上限 + 全天总目标 =====
+/* ==========================================================================
+   12 · 饮食记录（内置分类）
+   三餐 + 全天合计，数据在 state.diets / dietGoals / dietMealNotes
+   ========================================================================== */
 function dietMealMeta(key) {
   return DIET_MEALS.find(m => m.key === key) || DIET_MEALS[1];
 }
@@ -4159,7 +4267,14 @@ function dietTotalKcal(entries) {
 }
 
 // 一天三餐的汇总——打卡页、记账弹窗、「今日完成」都走这一个口径
-function dietMealStats(dateKey) {
+// 饮食的「餐次状态」是这一族函数唯一的真计算：
+//   mealState(date)          三（或四）餐的基本状态：entries / sum / goal / over / reached
+//   visibleDietMeals(date)   打卡页显示哪几餐（有目标 或 有记录，都没有则给一餐入口）
+//   dietGoalMeals()          哪几餐设了目标（等价于「打卡项」列表，与日期无关）
+//   dietTrackedMeals(date)   mealState 里带目标的那些，用于完成度分母
+//   dietMealHasEntries()     只读判断某餐有没有记录（不往 state 里补空数组，供连续天数循环用）
+// 除 dietMealHasEntries 外，其余都是 mealState 的投影，不要再各自重算一遍。
+function mealState(dateKey) {
   const entries = getDietEntries(dateKey);
   const goals = getDietGoals();
   return DIET_MEALS.map(m => {
@@ -4194,7 +4309,7 @@ function defaultDietMeal() {
 // 显示哪几餐：设了目标 或 当天有记录。全都空时按当前时段给一餐入口，
 // 这样清空所有餐目标的人不会连入口都找不到。
 function visibleDietMeals(dateKey) {
-  const all = dietMealStats(dateKey);
+  const all = mealState(dateKey);
   const shown = all.filter(s => s.hasGoal || s.entries.length > 0);
   return shown.length ? shown : [all[defaultDietMealIndex()]];
 }
@@ -4206,9 +4321,7 @@ function dietGoalMeals() {
 }
 
 function dietTrackedMeals(dateKey) {
-  const keys = dietGoalMeals();
-  const stats = dietMealStats(dateKey);
-  return keys.map(k => stats.find(s => s.key === k)).filter(Boolean);
+  return mealState(dateKey).filter(s => s.hasGoal);
 }
 
 // 某餐是否有记录（只读，不给 state 补空数组）
@@ -4256,7 +4369,7 @@ function setDietMealNote(dateKey, mealKey, note) {
 // 打卡页的饮食分类卡片：外层与普通分类完全相同，内容换成三餐行
 function dietCardHtml(cat, dateKey) {
   const meals = visibleDietMeals(dateKey);
-  const all = dietMealStats(dateKey);
+  const all = mealState(dateKey);
   const tracked = all.filter(s => s.hasGoal);       // 分母：设了目标的餐
   const reachedCount = tracked.filter(s => s.reached).length;
   const goals = getDietGoals();
@@ -4271,28 +4384,20 @@ function dietCardHtml(cat, dateKey) {
   const notCounted = !isCatCounted(cat);
 
   const rows = meals.map(s => {
-    const badge = s.hasGoal ? `${s.sum}/${s.goal} 千卡` : `${s.sum} 千卡`;
-    const badgeCls = s.over ? 'low' : (s.reached ? 'ok' : '');
     const hasRec = s.entries.length > 0;
     // 与普通量化项三态一致：有记录 checked、达标 done、有记录未达标 partial
-    const rowCls = `${hasRec ? 'checked' : ''} ${s.reached ? 'done' : (hasRec ? 'partial' : '')}`;
-    const note = getDietMealNote(dateKey, s.key);
-    const noteTip = note ? escapeHtml(note).replace(/"/g, '&quot;') : '添加备注';
-    const noteText = note ? `<span class="checkin-note" title="${noteTip}">${escapeHtml(note)}</span>` : '';
-    const noteBtn = `<span class="note-btn ${note ? 'has' : ''}" title="${noteTip}" onclick="event.stopPropagation(); openDietNoteModal('${s.key}')">💬</span>`;
-    const streak = getDietMealStreak(s.key);
-    return `<div class="checkin-item diet-meal-item ${rowCls}" onclick="openDietMealModal('${s.key}')">
-        <div class="checkin-checkbox">
-          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        </div>
-        <span class="checkin-item-name">${escapeHtml(s.name)}</span>
-        ${noteText}
-        <div class="checkin-right">
-          <span class="quant-badge ${badgeCls}">${badge}</span>
-          ${streak >= 2 ? `<span class="checkin-streak">🔥 ${streak}天</span>` : ''}
-          ${noteBtn}
-        </div>
-      </div>`;
+    const noteParts = checkinNoteParts(getDietMealNote(dateKey, s.key), `openDietNoteModal('${s.key}')`);
+    return checkinRowHtml({
+      name: s.name,
+      extraClass: 'diet-meal-item',
+      rowClass: `${hasRec ? 'checked' : ''} ${s.reached ? 'done' : (hasRec ? 'partial' : '')}`,
+      noteText: noteParts.text,
+      noteBtn: noteParts.btn,
+      streak: getDietMealStreak(s.key),
+      badge: s.hasGoal ? `${s.sum}/${s.goal} 千卡` : `${s.sum} 千卡`,
+      badgeClass: s.over ? 'low' : (s.reached ? 'ok' : ''),
+      onclick: `openDietMealModal('${s.key}')`
+    });
   }).join('');
 
   return `<div class="category-card">
@@ -4358,15 +4463,11 @@ function dietStatsCardHtml(cat, start, end, totalDays, color) {
     </div>`;
 }
 
-// ---------- 记账弹窗（同一弹窗内切 detail / picker 两视图）----------
-let dietModalMeal = 'lunch';
-let dietModalView = 'detail';
-let dietPickerKw = '';
 
 function openDietMealModal(mealKey) {
-  dietModalMeal = normMeal(mealKey);
-  dietModalView = 'detail';
-  dietPickerKw = '';
+  ui.diet.meal = normMeal(mealKey);
+  ui.diet.view = 'detail';
+  ui.diet.kw = '';
   openEditModal('', '', '<div id="dietModalInner"></div>', { type: 'dietMeal' }, '完成');
   const modal = document.getElementById('editModal');
   if (modal) modal.classList.add('diet-modal');
@@ -4374,20 +4475,20 @@ function openDietMealModal(mealKey) {
 }
 
 function switchDietModalView(view) {
-  dietModalView = view === 'picker' ? 'picker' : 'detail';
+  ui.diet.view = view === 'picker' ? 'picker' : 'detail';
   renderDietModal();
 }
 
 function renderDietModal() {
   const inner = document.getElementById('dietModalInner');
   if (!inner) return;
-  const dateKey = formatDate(currentDate);
-  const s = dietMealStats(dateKey).find(x => x.key === dietModalMeal) || dietMealStats(dateKey)[1];
+  const dateKey = formatDate(ui.date);
+  const s = mealState(dateKey).find(x => x.key === ui.diet.meal) || mealState(dateKey)[1];
   const titleEl = document.getElementById('editModalTitle');
   const subEl = document.getElementById('editModalSub');
-  const dayText = isToday(currentDate) ? '今天' : `${currentDate.getMonth() + 1}月${currentDate.getDate()}日`;
+  const dayText = isToday(ui.date) ? '今天' : `${ui.date.getMonth() + 1}月${ui.date.getDate()}日`;
 
-  if (dietModalView === 'picker') {
+  if (ui.diet.view === 'picker') {
     if (titleEl) titleEl.textContent = '添加食物';
     if (subEl) subEl.textContent = `${s.name} · ${dayText} · 点一下加一份`;
     inner.innerHTML = `<input class="diet-picker-search" id="dietPickerSearch" type="text"
@@ -4395,7 +4496,7 @@ function renderDietModal() {
       <div class="diet-picker-list" id="dietPickerList"></div>
       <div class="diet-picker-sum" id="dietPickerSum"></div>`;
     const kwEl = document.getElementById('dietPickerSearch');
-    if (kwEl) kwEl.value = dietPickerKw;
+    if (kwEl) kwEl.value = ui.diet.kw;
     renderDietPickerList();
     return;
   }
@@ -4440,7 +4541,7 @@ function dietRowHtml(e) {
 }
 
 function onDietPickerSearch(v) {
-  dietPickerKw = v || '';
+  ui.diet.kw = v || '';
   renderDietPickerList();
 }
 
@@ -4450,19 +4551,19 @@ function renderDietPickerList() {
   const all = getFoods();
   if (all.length === 0) {
     el.innerHTML = `<div class="diet-empty">食物库还是空的，先去「食物热量」添加</div>`;
-    refreshDietPickerSum();
+    renderDietPickerSum();
     return;
   }
-  const kw = dietPickerKw.trim().toLowerCase();
+  const kw = ui.diet.kw.trim().toLowerCase();
   let foods = all.slice();
   if (kw) foods = foods.filter(f => ((f.brand || '') + ' ' + (f.name || '')).toLowerCase().indexOf(kw) >= 0);
   foods.sort((a, b) => (a.brand || '').localeCompare(b.brand || '', 'zh') || (a.name || '').localeCompare(b.name || '', 'zh'));
   if (foods.length === 0) {
     el.innerHTML = `<div class="diet-empty">没有匹配的食物</div>`;
-    refreshDietPickerSum();
+    renderDietPickerSum();
     return;
   }
-  const added = dietEntriesOf(getDietEntries(formatDate(currentDate)), dietModalMeal).map(e => e.foodId);
+  const added = dietEntriesOf(getDietEntries(formatDate(ui.date)), ui.diet.meal).map(e => e.foodId);
   el.innerHTML = foods.map(f => `<div class="diet-picker-row" onclick="addDietByFood('${f.id}')">
       <span class="diet-picker-name"><span class="brand">${escapeHtml(f.brand || '')}</span>${escapeHtml(f.name)}</span>
       <span class="diet-picker-kcal">${f.kcal} 千卡</span>
@@ -4470,13 +4571,13 @@ function renderDietPickerList() {
         ? '<span class="diet-picker-added">已加</span>'
         : '<span class="diet-picker-add">＋</span>'}
     </div>`).join('');
-  refreshDietPickerSum();
+  renderDietPickerSum();
 }
 
-function refreshDietPickerSum() {
+function renderDietPickerSum() {
   const el = document.getElementById('dietPickerSum');
   if (!el) return;
-  const s = dietMealStats(formatDate(currentDate)).find(x => x.key === dietModalMeal);
+  const s = mealState(formatDate(ui.date)).find(x => x.key === ui.diet.meal);
   if (!s) return;
   el.innerHTML = `<span>${s.name} ${s.entries.length} 项 · ${s.qtySum} 份</span><span>该餐 <b>${s.sum}</b> 千卡</span>`;
 }
@@ -4485,8 +4586,8 @@ function refreshDietPickerSum() {
 function addDietByFood(foodId) {
   const food = getFoods().find(f => f.id === foodId);
   if (!food) return;
-  const meal = dietModalMeal;
-  const entries = getDietEntries(formatDate(currentDate));
+  const meal = ui.diet.meal;
+  const entries = getDietEntries(formatDate(ui.date));
   const exist = entries.find(e => normMeal(e.meal) === meal && e.foodId === foodId);
   if (exist) {
     exist.qty = Math.min((Number(exist.qty) || 0) + 1, 99);
@@ -4502,39 +4603,39 @@ function addDietByFood(foodId) {
     });
   }
   saveData();
-  refreshDietUI();
-  const s = dietMealStats(formatDate(currentDate)).find(x => x.key === meal);
+  renderDietModalLive();
+  const s = mealState(formatDate(ui.date)).find(x => x.key === meal);
   showToast(s && s.hasGoal
     ? `${s.name} ${s.sum} / ${s.goal} 千卡`
     : `已添加 ${food.name} · ${s ? s.sum : 0} 千卡`);
 }
 
 function changeDietQty(entryId, delta) {
-  const entries = getDietEntries(formatDate(currentDate));
+  const entries = getDietEntries(formatDate(ui.date));
   const e = entries.find(x => x.id === entryId);
   if (!e) return;
   const next = (Number(e.qty) || 0) + delta;
   if (next <= 0) { removeDietEntry(entryId); return; }
   e.qty = Math.min(next, 99);
   saveData();
-  refreshDietUI();
+  renderDietModalLive();
 }
 
 function removeDietEntry(entryId) {
-  const dateKey = formatDate(currentDate);
+  const dateKey = formatDate(ui.date);
   const entries = getDietEntries(dateKey);
   const idx = entries.findIndex(x => x.id === entryId);
   if (idx < 0) return;
   const removed = entries.splice(idx, 1)[0];
   if (entries.length === 0) delete getDiets()[dateKey];
   saveData();
-  refreshDietUI();
+  renderDietModalLive();
   showToast(`已移除 ${removed.name}`);
 }
 
 // 弹窗与打卡页同时刷新，避免关掉弹窗才看到变化
-function refreshDietUI() {
-  if (dietModalView === 'picker' && document.getElementById('dietPickerList')) {
+function renderDietModalLive() {
+  if (ui.diet.view === 'picker' && document.getElementById('dietPickerList')) {
     renderDietPickerList();
   } else if (document.getElementById('dietModalInner')) {
     renderDietModal();
@@ -4571,6 +4672,9 @@ function openDietGoalModal() {
 }
 
 // ===== Quant export (CSV) =====
+/* ==========================================================================
+   13 · 数据出口：JSON 备份 · 量化 CSV 导出
+   ========================================================================== */
 function collectQuantItems() {
   const out = [];
   (state.categories || []).forEach(cat => {
@@ -4659,12 +4763,15 @@ function fmtNum(v) {
   return Number.isInteger(r) ? String(r) : r.toFixed(1);
 }
 
+/* ==========================================================================
+   14 · 趋势大图 + 大尺寸折线图
+   ========================================================================== */
 function openTrendModal(itemId) {
   // 饮食三餐是伪 item（id 形如 diet_breakfast），走同一套趋势图
   const item = resolveTrendItem(itemId);
   if (!item) return;
   if (!isQuantItem(item) && !item.dietMeal) return;
-  const range = getPeriodRange(currentPeriod, statsOffset);
+  const range = getPeriodRange(ui.period, ui.statsOffset);
   const days = dailyValuesInRange(item, range.start, range.end);
   const cfg = item.quant;
   const hasTarget = cfg.target !== null && cfg.target !== undefined && cfg.target !== '' && isFinite(Number(cfg.target));
@@ -4695,81 +4802,9 @@ function openTrendModal(itemId) {
     { type: 'trendView' }, '关闭');
 }
 
+// 趋势弹窗里的大图：同一套绘制，只是尺寸与装饰更完整
 function renderTrendSvgLarge(item, days) {
-  const W = 620, H = 260, padL = 54, padB = 32, padT = 22, padR = 16;
-  const plotW = W - padL - padR, plotH = H - padT - padB;
-  const target = item.quant.target;
-  const cmp = item.quant.compare || 'gte';
-  const goodAbove = cmp !== 'lte';
-  const n = days.length;
-  // 没填的日子不画点也不连线（直接跳过去），避免出现掉到 0 的锯齿
-  const filled = days.map((d, i) => ({ i: i, v: d.value })).filter(p => p.v != null);
-  const hasTargetVal = target !== null && target !== undefined && target !== '' && isFinite(Number(target));
-  if (n === 0 || (filled.length === 0 && !hasTargetVal)) {
-    return `<div class="trend-empty trend-empty-lg">本区间暂无记录</div>`;
-  }
-
-  const rng = chartRange(filled.map(p => p.v), target, { ticks: 4, goodAbove });
-  const minV = rng.min, maxV = rng.max;
-  const range = (maxV - minV) || 1;
-  const x = i => padL + (n <= 1 ? plotW / 2 : i * plotW / (n - 1));
-  const y = v => padT + plotH - ((v - minV) / range) * plotH;
-
-  // 左侧刻度：步长已取整到 1/2/2.5/5×10^k，标签不会是 6.85 这类长小数
-  let grid = '';
-  rng.ticks.forEach(v => {
-    const gy = y(v).toFixed(1);
-    const zero = Math.abs(v) < 1e-9;
-    grid += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="${zero ? '#d1d5db' : '#e5e7eb'}" stroke-width="${zero ? 0.9 : 0.5}"/>`;
-    grid += `<text x="${padL - 8}" y="${gy}" text-anchor="end" dominant-baseline="central" font-size="10" fill="#9ca3af">${fmtTick(v, rng.step)}</text>`;
-  });
-
-  // 达标区：gte 在目标线以上、lte 在以下，淡绿一层，方向区别一眼可见
-  const zoneRect = hasTargetVal ? goodZoneRect(target, minV, maxV, goodAbove, y) : null;
-  const zone = zoneRect
-    ? `<rect x="${padL}" y="${zoneRect.top.toFixed(1)}" width="${plotW}" height="${zoneRect.height.toFixed(1)}" fill="#059669" opacity="0.07"/>`
-    : '';
-
-  const hitFn = goodAbove ? (v => v >= target) : (v => v <= target);
-  const dots = filled.map(p => {
-    const dotColor = !hasTargetVal ? '#4f46e5' : (hitFn(p.v) ? '#059669' : '#d97706');
-    return `<circle cx="${x(p.i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="3.4" fill="${dotColor}" stroke="#fff" stroke-width="1.5"/>`;
-  }).join('');
-
-  let path = '';
-  filled.forEach((p, k) => {
-    const px = x(p.i).toFixed(1), py = y(p.v).toFixed(1);
-    path += (k === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`);
-  });
-
-  let xLabels = '';
-  const idxs = n === 1 ? [0] : [0, Math.floor((n - 1) / 2), n - 1];
-  [...new Set(idxs)].forEach(idx => {
-    xLabels += `<text x="${x(idx).toFixed(1)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#9ca3af">${days[idx].key.slice(5)}</text>`;
-  });
-
-  // 目标线：设了目标就一定画出来，视野里始终包含目标，不留「超出显示范围」的空图
-  const dirText = goodAbove ? '以上达标' : '以下达标';
-  const dirArrow = goodAbove ? '↑' : '↓';
-  const hasT = target !== null && target !== undefined && target !== '' && isFinite(Number(target));
-  let targetLine = '', targetLabel = '';
-  if (hasT && rng.targetInView) {
-    const ty = y(Number(target)).toFixed(1);
-    const tyNum = Number(ty);
-    const labelY = (tyNum - 6) < (padT + 8) ? (tyNum + 14) : (tyNum - 6);
-    targetLine = `<line x1="${padL}" y1="${ty}" x2="${W - padR}" y2="${ty}" stroke="#dc2626" stroke-width="1.2" stroke-dasharray="5 4" opacity="0.85"/>`;
-    targetLabel = `<text x="${W - padR}" y="${labelY}" text-anchor="end" font-size="10" fill="#dc2626" paint-order="stroke" stroke="#fff" stroke-width="3" stroke-linejoin="round">${dirArrow} 目标 ${target} ${dirText}</text>`;
-  }
-
-  return `<svg class="trend-modal-svg" viewBox="0 0 ${W} ${H}" role="img">
-    ${zone}
-    ${grid}
-    ${targetLine}
-    ${targetLabel}
-    <path d="${path}" fill="none" stroke="#4f46e5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-    ${dots}
-    ${xLabels}
-  </svg>`;
+  return renderTrendSvg(item, days, { large: true });
 }
 
 // ===== Data Export/Import =====
@@ -4820,7 +4855,11 @@ function clearAllData() {
   showToast('所有数据已清空');
 }
 
-// ===== Utils =====
+/* ==========================================================================
+   15 · 渲染工具：转义 · toast
+   注意：这里是全站唯一的 HTML 转义入口
+   ========================================================================== */
+
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
@@ -4834,7 +4873,10 @@ function showToast(msg) {
   setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
-// ===== Init =====
+/* ==========================================================================
+   16 · 启动：本地加载 → 拉云端 → 渲染
+   ========================================================================== */
+
 function initApp() {
   loadData();
   renderCheckin();
@@ -4848,8 +4890,8 @@ function initApp() {
 }
 
 // On page load: check if user is already logged in
-currentUser = getAuthUser();
-if (currentUser && getAuthSession()) {
+sync.user = getAuthUser();
+if (sync.user && getAuthSession()) {
   enterApp();
 } else {
   // Not logged in, show auth overlay
