@@ -2246,27 +2246,45 @@ const AUTH_USER_KEY = 'checkin_user';
 
 
 /* ==========================================================================
-   02 · 认证：密码哈希 · 登录注册 · 会话
-   只碰 app_users 表与本地 session，不碰业务数据
+   02 · 认证：RPC 调用 · 登录注册 · 会话
+   密码在数据库里用 bcrypt 加盐哈希，前端只把邮箱密码交给函数；
+   表本身对 anon 关闭，读写一律走 public.app_* 这几个函数，不直连 REST。
    ========================================================================== */
 
-async function hashPassword(password, salt) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(salt + password);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+function authHeaders() {
+  return {
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json'
+  };
 }
 
-function generateSalt() {
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map(b => b.toString(16).padStart(2, '0')).join('');
+// 调 Postgres 函数，返回 { ok, data } 或 { ok: false, error }
+// 两个「ok」要分清：外层是 HTTP 通不通，data.ok 是业务成不成。
+// HTTP 404 基本都是函数没建（没跑 supabase/01_auth_rpc.sql）。
+async function supabaseRpc(fn, body) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(body || {})
+    });
+    if (!res.ok) return { ok: false, error: 'http-' + res.status };
+    return { ok: true, data: await res.json() };
+  } catch (e) {
+    console.error('rpc failed:', fn, e);
+    return { ok: false, error: 'network' };
+  }
 }
 
-function generateToken() {
-  if (crypto.randomUUID) return crypto.randomUUID();
-  return Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map(b => b.toString(16).padStart(2, '0')).join('');
-}
+// 函数返回的错误码 → 给用户看的话
+const AUTH_ERROR_TEXT = {
+  invalid_email: '邮箱格式不正确',
+  weak_password: '密码至少需要6位',
+  email_exists: '该邮箱已被注册',
+  no_user: '账号不存在，请先注册',
+  bad_password: '密码错误'
+};
 
 // ===== Auth (Custom app_users table) =====
 function getAuthSession() {
@@ -2336,79 +2354,30 @@ async function handleAuth() {
   errEl.textContent = '';
 
   try {
-    const headers = {
-      'apikey': SUPABASE_ANON_KEY,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json'
-    };
+    const isRegister = sync.mode === 'register';
+    const r = await supabaseRpc(isRegister ? 'app_register' : 'app_login', {
+      p_email: email,
+      p_password: password
+    });
 
-    if (sync.mode === 'register') {
-      // Check if email already exists
-      const checkUrl = `${SUPABASE_URL}/rest/v1/app_users?email=eq.${encodeURIComponent(email)}&select=id`;
-      const checkRes = await fetch(checkUrl, { headers });
-      const checkRows = await checkRes.json();
-      if (checkRows && checkRows.length > 0) {
-        throw new Error('该邮箱已被注册');
-      }
-
-      // Hash password and insert
-      const salt = generateSalt();
-      const passwordHash = await hashPassword(password, salt);
-      const token = generateToken();
-
-      const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/app_users`, {
-        method: 'POST',
-        headers: { ...headers, 'Prefer': 'return=representation' },
-        body: JSON.stringify({
-          email: email,
-          password_hash: passwordHash,
-          salt: salt,
-          session_token: token
-        })
-      });
-
-      if (!insertRes.ok) {
-        const errData = await insertRes.json();
-        throw new Error(errData.message || '注册失败');
-      }
-
-      const insertData = await insertRes.json();
-      const user = { id: insertData[0].id, email: email, token: token };
-      setAuthSession(user);
-      enterApp();
-
-    } else {
-      // Login: fetch user by email
-      const loginUrl = `${SUPABASE_URL}/rest/v1/app_users?email=eq.${encodeURIComponent(email)}&select=id,email,password_hash,salt,session_token`;
-      const loginRes = await fetch(loginUrl, { headers });
-      if (!loginRes.ok) throw new Error('登录失败，请重试');
-      const rows = await loginRes.json();
-
-      if (!rows || rows.length === 0) {
-        throw new Error('账号不存在，请先注册');
-      }
-
-      const userRow = rows[0];
-      const inputHash = await hashPassword(password, userRow.salt);
-
-      if (inputHash !== userRow.password_hash) {
-        throw new Error('密码错误');
-      }
-
-      // Generate new session token (invalidate old ones)
-      const newToken = generateToken();
-      const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/app_users?id=eq.${userRow.id}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ session_token: newToken })
-      });
-
-      if (!updateRes.ok) throw new Error('登录失败，请重试');
-
-      const user = { id: userRow.id, email: userRow.email, token: newToken };
-      setAuthSession(user);
-      enterApp();
+    if (!r.ok) {
+      // 404 = 函数还没建，不是用户操作的问题，要说清楚怎么办
+      if (r.error === 'http-404') throw new Error('服务器还没配置登录接口，请先执行 supabase/01_auth_rpc.sql');
+      if (r.error === 'network') throw new Error('网络异常，请重试');
+      throw new Error('操作失败，请重试');
     }
+
+    const out = r.data;
+    if (!out || !out.ok) {
+      throw new Error((out && AUTH_ERROR_TEXT[out.error]) || '操作失败，请重试');
+    }
+
+    setAuthSession({
+      id: out.user.id,
+      email: out.user.email,
+      token: out.user.token
+    });
+    enterApp();
   } catch(e) {
     errEl.textContent = e.message || '操作失败，请重试';
     btn.disabled = false;
@@ -2418,18 +2387,9 @@ async function handleAuth() {
 
 async function signOutUser() {
   if (!confirm('确定退出登录吗？')) return;
-  // Optionally clear session token on server
-  if (sync.user) {
-    const headers = {
-      'apikey': SUPABASE_ANON_KEY,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json'
-    };
-    fetch(`${SUPABASE_URL}/rest/v1/app_users?id=eq.${sync.user.id}`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({ session_token: null })
-    }).catch(() => {});
+  // 顺手让服务端把这个 token 作废；失败也照常退出本地，不阻塞用户
+  if (sync.user && sync.user.token) {
+    supabaseRpc('app_logout', { p_token: sync.user.token });
   }
   const uid = sync.user ? sync.user.id : null;
   clearAuthSession();
@@ -2477,26 +2437,16 @@ function updateSyncStatus(status, text) {
   txt.textContent = text;
 }
 
-function authHeaders() {
-  return {
-    'apikey': SUPABASE_ANON_KEY,
-    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-    'Content-Type': 'application/json'
-  };
-}
-
 async function fetchCloudData() {
   if (!sync.user) return { ok: false, error: 'not-logged-in' };
-  try {
-    const url = `${SUPABASE_URL}/rest/v1/checkin_data?user_key=eq.${encodeURIComponent(sync.user.id)}&select=data,updated_at`;
-    const res = await fetch(url, { headers: authHeaders() });
-    if (!res.ok) return { ok: false, error: 'http-' + res.status };
-    const rows = await res.json();
-    return { ok: true, row: rows.length > 0 ? rows[0] : null };
-  } catch(e) {
-    console.error('Fetch cloud error:', e);
-    return { ok: false, error: 'network' };
+  const r = await supabaseRpc('app_read_data', { p_token: sync.user.token });
+  if (!r.ok) return { ok: false, error: r.error };
+  const out = r.data;
+  if (!out || out.ok === false) {
+    // auth = token 失效（在别的设备重新登录过 / 被登出）
+    return { ok: false, error: (out && out.error) || 'bad-response' };
   }
+  return { ok: true, row: out.row || null };
 }
 
 // ===== 内容指纹：判断「谁改过」的唯一依据 =====
@@ -2578,48 +2528,59 @@ function decideSync(localFp, cloudFp, baseFp, localEmpty) {
   return 'conflict';
 }
 
-function applyCloudState(cloudData) {
+// cloudFp：云端那一版自带的指纹。传了就记它当初的指纹，不要重算 ——
+// ensureStateShape 会补默认字段，重算结果与云端存的对不上，下次推送会误判成冲突
+function applyCloudState(cloudData, cloudFp) {
   state = cloudData || makeEmptyState();
   ensureStateShape();
   persist();
-  saveBaseFp(stateFingerprint(state));
+  saveBaseFp(cloudFp || stateFingerprint(state));
   paintCurrentTab();   // 云端覆盖本地后，当前屏幕整块重画
 }
 
-async function pushCloudData() {
+// force = true：用户在冲突条上选了「用本机的」，无条件覆盖云端
+async function pushCloudData(force) {
   if (!sync.user || sync.inFlight) return false;
   sync.inFlight = true;
   updateSyncStatus('syncing', '同步中...');
   // 推送期间用户可能又改了数据，基线要记「这次真正推上去的那一版」，
   // 不是请求返回时内存里的那一版，否则下次拉取会误判成云端落后
   const pushedFp = stateFingerprint(state);
-  try {
-    const url = `${SUPABASE_URL}/rest/v1/checkin_data?on_conflict=user_key`;
-    const payload = {
-      user_key: sync.user.id,
-      data: state,
-      updated_at: new Date().toISOString()
-    };
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { ...authHeaders(), 'Prefer': 'resolution=merge-duplicates' },
-      body: JSON.stringify(payload)
-    });
-    sync.inFlight = false;
-    if (res.ok) {
-      updateSyncStatus('online', '已同步');
-      sync.lastAt = Date.now();
-      saveBaseFp(pushedFp);   // 推上去的这版就是新的共同基线
-      return true;
-    } else {
-      updateSyncStatus('offline', '同步失败');
-      return false;
-    }
-  } catch(e) {
-    sync.inFlight = false;
-    updateSyncStatus('offline', '网络错误');
+  // 带上这台设备上次看到的云端指纹：数据库会在同一个事务里比对，
+  // 对不上就拒绝写入并把云端那版交回来。以前是盲推，会冲掉另一台设备的改动。
+  const baseFp = force ? null : (loadBaseFp() || null);
+
+  const r = await supabaseRpc('app_write_data', {
+    p_token: sync.user.token,
+    p_data: state,
+    p_fp: pushedFp,
+    p_base_fp: baseFp
+  });
+  sync.inFlight = false;
+
+  if (!r.ok) {
+    if (r.error === 'http-404') updateSyncStatus('offline', '同步接口未配置');
+    else updateSyncStatus('offline', r.error === 'network' ? '网络错误' : '同步失败');
     return false;
   }
+
+  const out = r.data || {};
+  if (out.conflict) {
+    // 云端已经被别的设备改过：不写，交给用户裁决，两边都不丢
+    sync.conflict = { data: out.data, updatedAt: out.updated_at || '', fp: out.fingerprint || '' };
+    updateSyncStatus('conflict', '发现冲突');
+    renderSyncConflictBar();
+    return false;
+  }
+  if (out.ok !== true) {
+    updateSyncStatus('offline', out.error === 'auth' ? '登录已失效' : '同步失败');
+    return false;
+  }
+
+  updateSyncStatus('online', '已同步');
+  sync.lastAt = Date.now();
+  saveBaseFp(pushedFp);   // 推上去的这版就是新的共同基线
+  return true;
 }
 
 function scheduleCloudPush() {
@@ -2638,6 +2599,15 @@ async function syncFromCloud() {
   // 请求失败和「云端确实没有数据」必须分开：
   // 以前两者都返回 null，断网时会把本地旧数据当成权威推上去
   if (!res.ok) {
+    if (res.error === 'auth') {
+      // token 被作废了（在别处重新登录过 / 已登出），不是网络问题
+      updateSyncStatus('offline', '登录已失效，请重新登录');
+      return;
+    }
+    if (res.error === 'http-404') {
+      updateSyncStatus('offline', '同步接口未配置');
+      return;
+    }
     updateSyncStatus('offline', res.error === 'network' ? '网络错误' : '同步失败');
     return;
   }
@@ -2655,25 +2625,29 @@ async function syncFromCloud() {
   }
 
   const cloudData = res.row.data || {};
+  const cloudFp = res.row.fingerprint || '';
   const act = decideSync(stateFingerprint(state), stateFingerprint(cloudData), loadBaseFp(), isEmptyState(state));
   if (act === 'pull') {
-    applyCloudState(cloudData);
+    // 基线记「云端这一版的指纹」，不要用整形后重算的那个：
+    // ensureStateShape 会补默认字段，重算出来的指纹与云端存的对不上，
+    // 下次推送就会被自己判成冲突
+    applyCloudState(cloudData, cloudFp);
     updateSyncStatus('online', '已同步');
   } else if (act === 'push') {
     await pushCloudData();
   } else if (act === 'equal') {
-    saveBaseFp(stateFingerprint(state));
+    saveBaseFp(cloudFp || stateFingerprint(state));
     updateSyncStatus('online', '已同步');
   }
   else {
-    showSyncConflict(cloudData, res.row.updated_at);
+    showSyncConflict(cloudData, res.row.updated_at, cloudFp);
   }
   sync.lastAt = Date.now();
 }
 
 // ===== 冲突提示条：只在「两边都改过」时出现 =====
-function showSyncConflict(cloudData, updatedAt) {
-  sync.conflict = { data: cloudData, updatedAt: updatedAt || '' };
+function showSyncConflict(cloudData, updatedAt, cloudFp) {
+  sync.conflict = { data: cloudData, updatedAt: updatedAt || '', fp: cloudFp || '' };
   updateSyncStatus('conflict', '发现冲突');
   renderSyncConflictBar();
 }
@@ -2702,11 +2676,11 @@ async function resolveSyncConflict(choice) {
   sync.conflict = null;
   renderSyncConflictBar();
   if (choice === 'cloud') {
-    applyCloudState(c.data);
+    applyCloudState(c.data, c.fp);
     updateSyncStatus('online', '已用云端数据覆盖本机');
   } else {
-    saveBaseFp('');            // 强制走一次完整推送
-    await pushCloudData();
+    // 强制推：p_base_fp 传 null，数据库那侧不再比对直接覆盖
+    await pushCloudData(true);
     updateSyncStatus('online', '已用本机数据覆盖云端');
   }
 }

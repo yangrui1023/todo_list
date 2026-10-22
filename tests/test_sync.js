@@ -90,10 +90,15 @@ let pulls = 0, pushes = 0;
 // 所以基线指纹必须取「整形后」的内容，不能用原始字面量算
 const fpOfState = () => G('stateFingerprint(state)');
 
+// 所有读写都走 /rpc/app_*，服务端行为在这里模拟：
+// 云端存一份 { data, fingerprint }，写入前拿 p_base_fp 比对，对不上就拒绝
+let cloudStore = null;
+const reply = d => Promise.resolve({ ok: true, json: () => Promise.resolve(d) });
+
 function setup(localData, cloudData, baseKind) {
   Object.keys(els).forEach(k => delete els[k]);
   store['checkin_app_data_u1'] = JSON.stringify(localData);
-  G("sync.user = { id: 'u1', email: 'a@b.c' }; sync.conflict = null; sync.inFlight = false;");
+  G("sync.user = { id: 'u1', email: 'a@b.c', token: 'tk1' }; sync.conflict = null; sync.inFlight = false;");
   S.loadData();
   const localFp = fpOfState();
   const localSnapshot = G('JSON.stringify(state)');
@@ -110,10 +115,28 @@ function setup(localData, cloudData, baseKind) {
   G('sync.baseFp = loadBaseFp();');
 
   pulls = 0; pushes = 0;
+  cloudStore = { data: cloudData, fingerprint: cloudFp, updated_at: '2026-10-22T03:00:00Z' };
   S.fetch = (url, opts) => {
-    if (opts && opts.method === 'POST') { pushes++; return Promise.resolve({ ok: true, json: () => Promise.resolve([]) }); }
-    pulls++;
-    return Promise.resolve({ ok: true, json: () => Promise.resolve([{ data: cloudData, updated_at: '2026-10-22T03:00:00Z' }]) });
+    const fn = String(url).split('/rpc/')[1];
+    const body = JSON.parse((opts && opts.body) || '{}');
+    if (fn === 'app_read_data') {
+      pulls++;
+      return reply({ ok: true, row: cloudStore });
+    }
+    if (fn === 'app_write_data') {
+      pushes++;
+      // 云端已有内容、且和这台设备上次看到的不一样 → 拒绝写入，交回云端那版
+      if (cloudStore && cloudStore.fingerprint && body.p_base_fp
+          && cloudStore.fingerprint !== body.p_base_fp) {
+        return reply({
+          ok: false, conflict: true, data: cloudStore.data,
+          fingerprint: cloudStore.fingerprint, updated_at: cloudStore.updated_at
+        });
+      }
+      cloudStore = { data: body.p_data, fingerprint: body.p_fp, updated_at: '2026-10-22T04:00:00Z' };
+      return reply({ ok: true, fingerprint: body.p_fp });
+    }
+    return reply({ ok: true });
   };
 }
 const run = () => new Promise(r => { S.syncFromCloud().then(r); });
@@ -174,6 +197,23 @@ const run = () => new Promise(r => { S.syncFromCloud().then(r); });
   await run();
   ok(pushes === pushesBefore, '断网时不推送本地旧数据');
   ok(G('state.categories[0].name') === '本机分类', '本地数据保持不动');
+
+  console.log('\n=== 12. 两台设备：后推的那台不再盲推覆盖 ===');
+  // 电脑 B 的基线停在 cloudFp，还没拉到手机刚推的那一版
+  setup(LOCAL, CLOUD, 'cloud');
+  const phoneVersion = THIRD;                     // 手机上改出来的版本
+  cloudStore = { data: phoneVersion, fingerprint: 'fp-from-phone', updated_at: '2026-10-22T05:00:00Z' };
+
+  const okPush = await S.pushCloudData();         // B 直接推（旧逻辑会覆盖）
+  ok(okPush === false, '推送被服务端拒绝，没有写进去');
+  ok(JSON.stringify(cloudStore.data) === JSON.stringify(phoneVersion), '云端仍是手机那一版');
+  ok(G('sync.conflict') !== null, '转成冲突交给人选，而不是静默丢一边');
+  ok(BAR().style.display === 'flex', '冲突条已显示');
+
+  console.log('\n=== 13. 裁决「用本机的」时带 force，能真正覆盖 ===');
+  await S.resolveSyncConflict('local');
+  ok(JSON.stringify(cloudStore.data).indexOf('本机分类') >= 0, '这次覆盖成功');
+  ok(cloudStore.fingerprint === fpOfState(), '云端指纹换成本机这一版');
 
   console.log('');
   if (fail > 0) { console.log(`${fail} FAILED`); process.exit(1); }

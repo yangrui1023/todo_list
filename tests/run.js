@@ -16,6 +16,7 @@ const SUITES = [
   ['test_security.js',   '安全：文本/属性两个转义出口、id 白名单、CSV 公式注入'],
   ['test_migrate.js',    '数据结构版本与迁移：老数据升级、幂等、脏数据兜底'],
   ['test_sync.js',       '同步：三方比较、冲突提示、断网不清空云端'],
+  ['test_auth.js',       '认证：全部走 RPC、不直连表、token 失效有提示'],
 ];
 
 let failed = [];

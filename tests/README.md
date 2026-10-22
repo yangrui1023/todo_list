@@ -21,7 +21,8 @@ node tests/run.js
 | `test_adapter.js` | 追踪条目适配器：entry 形状统一、注册表完整、渲染层无形态分支、加新形态只改注册表 |
 | `test_security.js` | 两个转义出口（文本 / 属性）、量化单位注入、备注 title、id 白名单、CSV 公式注入 |
 | `test_migrate.js` | 数据结构版本：老数据升级、缺字段补默认、显式 null 不被覆盖、幂等、脏数据兜底 |
-| `test_sync.js` | 同步三方比较矩阵、冲突提示与裁决、登出重登不清空云端、断网不误推 |
+| `test_sync.js` | 同步三方比较矩阵、冲突提示与裁决、登出重登不清空云端、断网不误推、两台设备不盲推覆盖 |
+| `test_auth.js` | 认证全部走 RPC、前端不直连表、token 失效有提示、登出清干净 |
 
 ## 分类形态的护栏
 
@@ -84,6 +85,18 @@ node tests/compare_render.js /tmp/base.html
 - **自由文本不进 `onclick` 字面量**：品牌名是用户输入，`onclick="fn('${brand}')"`
   里一个单引号就能截断调用。品牌筛选因此按**索引**传参（`setDietPickerBrand(2)`），
   名字只出现在文本节点里。id 能拼进 `onclick` 是因为它有白名单当护栏。
+
+## 数据访问：只走 RPC，不直连表
+
+前端不再 `select app_users` / `checkin_data`，所有读写都是
+`POST /rest/v1/rpc/app_*`，函数内部拿 `session_token` 认人。
+`test_auth.js` 里有源码护栏：源码里出现 `/rest/v1/app_users`
+或 `/rest/v1/checkin_data` 直接判红。
+
+原因是 anon key 本来就在网页源码里，只要表对 anon 开放，
+谁都能读走 `password_hash` / `salt` / 别人的 `session_token`。
+
+数据库脚本在 `supabase/`，**执行顺序很重要**，见那里的 README。
 
 ## 同步判定：三方比较，不猜
 
