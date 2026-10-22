@@ -11,6 +11,7 @@ const SUITES = [
   ['test_diet_card.js',  '饮食卡片、管理页、弹窗记账'],
   ['test_diet_trend.js', '饮食三餐接入趋势图与统计页'],
   ['test_diet_align.js', '饮食分类与普通分类行为对齐'],
+  ['test_adapter.js',    '追踪条目适配器：形状统一、注册表完整、渲染层无形态分支'],
 ];
 
 let failed = [];

@@ -17,6 +17,20 @@ node tests/run.js
 | `test_diet_card.js` | 饮食卡片三态、管理页四个目标行、弹窗记账 |
 | `test_diet_trend.js` | 三餐 + 全天合计接入趋势图与统计页 |
 | `test_diet_align.js` | 饮食分类与普通分类的行为对齐（菜单 / 开关 / 归档 / 删除 / 连续天数） |
+| `test_adapter.js` | 追踪条目适配器：entry 形状统一、注册表完整、渲染层无形态分支、加新形态只改注册表 |
+
+## 分类形态的护栏
+
+`test_adapter.js` 里有两条硬约束，用来防止「饮食分支」重新散回渲染层：
+
+1. **渲染函数体里不许出现形态判断**：直接扫源码，`renderCheckin` / `renderStats` /
+   `renderManage` 的函数体内不得出现 `isDietCat`、`catKind`、`builtin`。
+2. **`isDietCat` 全文件不超过 3 处**（定义、`getDietCat`、彻底删除时清数据），
+   统计前会剥掉注释，避免「注释里提了一句」也算数。
+
+它还模拟了「加一种新形态」：临时往 `CAT_ADAPTERS` 注册一个 `sport` 适配器，
+断言三个页面不需要任何改动就能把它渲染出来。这条测试就是第四层重构的目的本身。
+
 
 ## 新鲜度测试怎么判断「该刷新什么」
 
