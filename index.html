@@ -757,6 +757,26 @@ body {
 .sync-dot.online { background: var(--success); animation: pulse 2s infinite; }
 .sync-dot.syncing { background: var(--warning); animation: pulse 1s infinite; }
 .sync-dot.offline { background: var(--text-muted); }
+.sync-dot.conflict { background: var(--warning); animation: pulse 0.8s infinite; }
+
+/* 冲突提示条：只在「两边都改过」时出现，平时 display:none */
+.sync-conflict-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 10px 16px;
+  background: #fff7ed;
+  border-bottom: 1px solid #fed7aa;
+  color: #9a3412;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.sync-conflict-bar .conflict-text { flex: 1 1 260px; }
+.sync-conflict-bar .conflict-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.sync-conflict-bar .btn-sm { padding: 5px 12px; font-size: 13px; }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
@@ -1640,6 +1660,9 @@ body {
   <div data-page-node-id="yG2OJ3Guv6FvGgYLDLcNDn" class="tab" data-tab="manage" onclick="switchTab('manage')"><!--pnid:6n7ezAqZW3rnzWIoQyQj8v-->分类管理</div>
 </div>
 
+<!-- 同步冲突条：两边都改过时才出现，由 renderSyncConflictBar() 控制显隐 -->
+<div class="sync-conflict-bar" id="syncConflictBar"></div>
+
 <div data-page-node-id="zbUN6G0IU1riSfmuxGwJTf" class="container">
   <!--pnid:1j8LB3atS1dU2PFGxvzqs1--><!-- ===== Tab: Checkin ===== -->
   <div data-page-node-id="BKdezgXTNKVCoAlIHwLnru" class="tab-content active" id="tab-checkin">
@@ -1801,17 +1824,27 @@ body {
 //     三个页面一行都不用改。
 //
 // 状态约定：
-//   state   业务数据，会进本地缓存 / 云同步 / JSON 备份，字段变更必须走 ensureStateShape
+//   state   业务数据，会进本地缓存 / 云同步 / JSON 备份，字段变更必须走三步：
+//           ① makeEmptyState() 补默认值 ② MIGRATIONS 加一条 ③ SCHEMA_VERSION 加一
 //   ui      界面状态，只决定怎么显示，不进同步
-//   sync    登录会话与同步节奏
+//   sync    登录会话与同步节奏（含冲突快照 sync.conflict）
+//
+// 转义约定（第四层后的安全收口）：
+//   文本节点用 escapeHtml，属性值用 escAttr —— 浏览器不会替文本节点转义引号，
+//   value="${escapeHtml(x)}" 等于把属性留给用户输入来截断。除此之外还有两条防线：
+//   入口 id 白名单（sanitizeState）与 CSV 文本列前缀（csvTextCell）。
+//
+// 同步约定：
+//   不上来就覆盖。三方比较（本地 / 云端 / 上次共识）决定 pull / push / conflict，
+//   两边都改过就弹条让用户裁决，不猜。判据是内容指纹，不是时间戳。
 //
 // 分区按 01~16 编号，改哪块先跳到对应 banner。
 // 改完必须跑 node tests/run.js，全绿才算完成。
 // ============================================================================
 // ===== Data Layer =====
 /* ==========================================================================
-   01 · 数据层：state 结构 · 本地存取 · 默认数据
-   state 的字段变更请同步改 ensureStateShape
+   01 · 数据层：state 结构 · 迁移链 · 入口清洗 · 本地存取
+   加字段请改 makeEmptyState + MIGRATIONS，不要再往 ensureStateShape 里塞 if
    ========================================================================== */
 const STORAGE_KEY = 'checkin_app_data';
 function getStorageKey() {
@@ -1848,15 +1881,7 @@ const DIET_MEAL_KEYS = DIET_MEALS.map(m => m.key);
 // 三餐是「每餐上限」，total 是全天总目标，两者独立、互不联动
 const DIET_GOAL_DEFAULT = { breakfast: 500, lunch: 700, dinner: 600, total: 2000 };
 
-let state = {
-  categories: [],
-  records: {}, // { "2026-08-10": ["item_id1", "item_id2"] }
-  foods: [],   // [{ id, kind: 'drink'|'food', brand, name, kcal }]
-  diets: {},   // { "2026-08-10": [{ id, meal:'breakfast'|'lunch'|'dinner', foodId, name, brand, kcal, qty }] }
-  dietGoals: { breakfast: 500, lunch: 700, dinner: 600, total: 2000 }, // 每餐热量目标（千卡），null = 不设目标
-  dietMealNotes: {}, // { "2026-08-10": { breakfast: "备注" } } 每餐备注，与普通打卡项备注同构
-  dietRemoved: false // 用户彻底删除饮食分类后置 true，避免 ensureDietCategory 又把它建回来
-};
+// 真实数据由 loadData() 从本地缓存接管，这里的声明放在下面 makeEmptyState 之后
 
 // ===== 界面状态：只决定「怎么显示」，不进云同步、不进导出 =====
 const ui = {
@@ -1880,31 +1905,187 @@ const sync = {
   pushTimer: null, // 推送防抖句柄
   inFlight: false, // 是否正在同步，用于防重入
   lastAt: 0,       // 上次同步成功时间戳
-  mode: 'login'    // 'login' | 'register'
+  mode: 'login',   // 'login' | 'register'
+  baseFp: '',      // 上次「本地与云端确认一致」时的内容指纹
+  conflict: null   // 冲突时的云端快照 { data, updatedAt }，非空表示正在等用户裁决
 };
 
-// 统一补全 state 结构：旧本地缓存 / 旧 JSON 备份 / 云端旧记录都可能缺 foods / diets / dietGoals
-function ensureStateShape() {
-  if (!state || typeof state !== 'object') state = {};
-  if (!Array.isArray(state.categories)) state.categories = [];
-  if (!state.records || typeof state.records !== 'object') state.records = {};
-  if (!Array.isArray(state.foods)) state.foods = [];
-  if (!state.diets || typeof state.diets !== 'object') state.diets = {};
-  if (!state.dietGoals || typeof state.dietGoals !== 'object') {
-    state.dietGoals = Object.assign({}, DIET_GOAL_DEFAULT);
+// ===== 数据结构版本与迁移 =====
+// 加字段的正确姿势（三段式，别只改其中一处）：
+//   ① makeEmptyState() 里补默认值 —— 新装用户直接拿到完整结构
+//   ② 在 MIGRATIONS 里追加一条 { to: N+1, up(s) }，只写「从 N 到 N+1 的差异」
+//   ③ SCHEMA_VERSION 加一
+// 老数据（本地缓存 / 云端旧记录 / 别人发来的 JSON 备份）进来时，会从它自己的版本
+// 一路跑到最新，跑完再统一过一遍 normalize + sanitize。
+const SCHEMA_VERSION = 2;
+
+function makeEmptyState() {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    categories: [],
+    records: {},        // { "2026-08-10": [{ id, value?, note? }] }
+    foods: [],          // [{ id, kind: 'drink'|'food', brand, name, kcal }]
+    diets: {},          // { "2026-08-10": [{ id, meal, foodId, name, brand, kcal, qty }] }
+    dietGoals: Object.assign({}, DIET_GOAL_DEFAULT),
+    dietMealNotes: {},  // { "2026-08-10": { breakfast: "备注" } }
+    dietRemoved: false, // 用户彻底删掉饮食分类后置 true，避免又被建回来
+    _rev: 0,            // 数据版本号，同步时用来判断「谁改过」
+    _updated_at: ''
+  };
+}
+
+// 全站唯一的业务状态。真实数据由 loadData() 从本地缓存接管；
+// 这里的初值只是为了在 loadData 之前访问 state 也不至于崩。
+let state = makeEmptyState();
+
+// 迁移表：每一项只负责「上一版 → 这一版」的差异，按 to 升序执行。
+// 没有 schemaVersion 的老数据一律视为第 1 版。
+const MIGRATIONS = [
+  {
+    to: 2,
+    up(s) {
+      // v1 时代没有食物库 / 饮食明细 / 餐次备注
+      if (!Array.isArray(s.foods)) s.foods = [];
+      if (!s.diets || typeof s.diets !== 'object') s.diets = {};
+      if (!s.dietMealNotes || typeof s.dietMealNotes !== 'object') s.dietMealNotes = {};
+      if (!s.dietGoals || typeof s.dietGoals !== 'object') s.dietGoals = {};
+      if (typeof s.dietRemoved !== 'boolean') s.dietRemoved = false;
+      // 缺哪一餐的目标就补默认值（用户显式设成 null 的保持 null）
+      s.dietGoals = Object.assign({}, DIET_GOAL_DEFAULT, s.dietGoals);
+      // 更早的饮食记录没有 meal 字段：默认归午餐，别让历史数据凭空消失
+      Object.keys(s.diets).forEach(k => {
+        const arr = s.diets[k];
+        if (!Array.isArray(arr)) { s.diets[k] = []; return; }
+        arr.forEach(e => {
+          if (e && DIET_MEAL_KEYS.indexOf(e.meal) < 0) e.meal = 'lunch';
+        });
+      });
+    }
   }
-  if (!state.dietMealNotes || typeof state.dietMealNotes !== 'object') state.dietMealNotes = {};
-  if (typeof state.dietRemoved !== 'boolean') state.dietRemoved = false;
-  // 旧版本只有三餐目标：补全天总目标（用户可单独改，不与三餐相加联动）
-  if (state.dietGoals.total === undefined) state.dietGoals.total = DIET_GOAL_DEFAULT.total;
-  // 旧记录没有 meal 字段：默认归到午餐（正餐），避免历史数据凭空消失
-  Object.keys(state.diets).forEach(k => {
-    const arr = state.diets[k];
-    if (!Array.isArray(arr)) { state.diets[k] = []; return; }
-    arr.forEach(e => {
-      if (e && DIET_MEAL_KEYS.indexOf(e.meal) < 0) e.meal = 'lunch';
+];
+
+// 兜底整形：不管数据自称第几版，跑完都要满足这些前提。
+// 这里只保证「能用、不崩」，不负责语义迁移。
+function normalizeState(s) {
+  if (!Array.isArray(s.categories)) s.categories = [];
+  if (!s.records || typeof s.records !== 'object' || Array.isArray(s.records)) s.records = {};
+  if (!Array.isArray(s.foods)) s.foods = [];
+  if (!s.diets || typeof s.diets !== 'object' || Array.isArray(s.diets)) s.diets = {};
+  if (!s.dietGoals || typeof s.dietGoals !== 'object') s.dietGoals = {};
+  s.dietGoals = Object.assign({}, DIET_GOAL_DEFAULT, s.dietGoals);
+  if (!s.dietMealNotes || typeof s.dietMealNotes !== 'object') s.dietMealNotes = {};
+  if (typeof s.dietRemoved !== 'boolean') s.dietRemoved = false;
+  if (!Number.isFinite(s._rev) || s._rev < 0) s._rev = 0;
+  return s;
+}
+
+// ===== 入口清洗：别人发来的 JSON 备份也要当成不可信输入 =====
+// 分类 / 打卡项的 id 会被拼进 onclick="openXxx('id')"，一个带引号的 id
+// 就能凭空多出一个事件处理器。所以 id 只认白名单，不合格的直接换新。
+const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function clipStr(v, max) {
+  if (v == null) return '';
+  return String(v).slice(0, max);
+}
+
+function sanitizeState(s) {
+  const seenIds = new Set();
+  const idMap = new Map();   // 旧 id → 新 id，records 里的引用要跟着换
+  const takeId = (obj, prefix) => {
+    const old = obj && obj.id;
+    if (!old || !ID_RE.test(old) || seenIds.has(old)) {
+      const nid = genId(prefix);
+      // 旧 id 无论是「非法」还是「重复」，都把映射记下来，
+      // records 里的引用才能跟着换，不然历史打卡会凭空消失
+      if (typeof old === 'string' && old && !idMap.has(old)) idMap.set(old, nid);
+      obj.id = nid;
+    }
+    seenIds.add(obj.id);
+  };
+
+  s.categories.forEach(cat => {
+    if (!cat || typeof cat !== 'object') return;
+    takeId(cat, 'cat');
+    cat.name = clipStr(cat.name, 30) || '未命名分类';
+    if (cat.startDate != null && !DATE_RE.test(String(cat.startDate))) delete cat.startDate;
+    if (!Array.isArray(cat.items)) cat.items = [];
+    cat.items = cat.items.filter(it => it && typeof it === 'object');
+    cat.items.forEach(item => {
+      takeId(item, 'item');
+      item.name = clipStr(item.name, 30) || '未命名打卡项';
+      if (item.quant && typeof item.quant === 'object') {
+        const q = item.quant;
+        q.unit = clipStr(q.unit, 10);
+        if (!Number.isFinite(Number(q.target))) q.target = 0;
+        if (q.compare !== 'lte') q.compare = 'gte';
+      } else if (item.quant) {
+        delete item.quant;   // quant 是 true / 字符串之类的脏数据，当普通项处理
+      }
     });
   });
+
+  // 记录里的 id 引用：换了 id 的要跟着换，指向已删除打卡项的直接丢掉
+  Object.keys(s.records).forEach(key => {
+    if (!DATE_RE.test(key)) { delete s.records[key]; return; }
+    const arr = s.records[key];
+    if (!Array.isArray(arr)) { delete s.records[key]; return; }
+    s.records[key] = arr.map(r => {
+      // 老格式是纯字符串 ["itemId"]，含义等于 { id, value: 1 }；
+      // 这里必须保持原样，一旦统一成对象，value 会变成 0（= 没打卡）
+      if (typeof r === 'string') return idMap.get(r) || r;
+      if (!r || typeof r !== 'object') return null;
+      if (idMap.has(r.id)) r.id = idMap.get(r.id);
+      if (r.note != null) r.note = clipStr(r.note, 200);
+      return r;
+    }).filter(r => r && ID_RE.test(typeof r === 'string' ? r : String(r.id)));
+  });
+
+  // 饮食明细里的字符串也要截断（它们会被渲染成食物名）
+  Object.keys(s.diets).forEach(key => {
+    if (!DATE_RE.test(key)) { delete s.diets[key]; return; }
+    const arr = s.diets[key];
+    if (!Array.isArray(arr)) { delete s.diets[key]; return; }
+    s.diets[key] = arr.filter(e => e && typeof e === 'object').map(e => {
+      e.name = clipStr(e.name, 30);
+      e.brand = clipStr(e.brand, 20);
+      return e;
+    });
+  });
+
+  Object.keys(s.dietMealNotes).forEach(key => {
+    const m = s.dietMealNotes[key];
+    if (!DATE_RE.test(key) || !m || typeof m !== 'object') { delete s.dietMealNotes[key]; return; }
+    Object.keys(m).forEach(k => { m[k] = clipStr(m[k], 200); });
+  });
+
+  s.foods = s.foods.filter(f => f && typeof f === 'object').map(f => {
+    if (!f.id || !ID_RE.test(String(f.id)) || seenIds.has(f.id)) f.id = genId('food');
+    seenIds.add(f.id);
+    f.name = clipStr(f.name, 30);
+    f.brand = clipStr(f.brand, 20);
+    if (!Number.isFinite(Number(f.kcal))) f.kcal = 0;
+    if (f.kind !== 'drink') f.kind = 'food';
+    return f;
+  });
+
+  return s;
+}
+
+// 统一补全 state 结构：旧本地缓存 / 旧 JSON 备份 / 云端旧记录都可能缺字段。
+// 顺序不能反：先按版本迁移，再整形兜底，最后清洗入口数据。
+function ensureStateShape() {
+  if (!state || typeof state !== 'object' || Array.isArray(state)) state = makeEmptyState();
+  let v = Number(state.schemaVersion);
+  if (!Number.isFinite(v) || v < 1) v = 1;          // 没有版本号 = 第 1 版
+  if (v > SCHEMA_VERSION) v = SCHEMA_VERSION;       // 未来版本的数据，别试图回调
+  MIGRATIONS.forEach(m => {
+    if (m.to > v) { m.up(state); v = m.to; }
+  });
+  state.schemaVersion = SCHEMA_VERSION;
+  normalizeState(state);
+  sanitizeState(state);
   ensureDietCategory();
   return state;
 }
@@ -1948,18 +2129,18 @@ function loadData() {
     } catch(e) {
       // Corrupted local cache: start empty, let cloud sync decide (cloud-first)
       console.error('Failed to load data', e);
-      state = { categories: [], records: {}, foods: [], diets: {}, dietGoals: { breakfast: 500, lunch: 700, dinner: 600, total: 2000 } };
+      state = makeEmptyState();
     }
   } else {
     // No local cache (new device / after sign-out): start empty,
     // DO NOT load defaults yet — cloud sync will pull real data first.
-    state = { categories: [], records: {}, foods: [], diets: {}, dietGoals: { breakfast: 500, lunch: 700, dinner: 600, total: 2000 } };
+    state = makeEmptyState();
   }
 }
 
 function loadDefaultData() {
-  state = {
-    categories: [
+  state = makeEmptyState();
+  state.categories = [
       {
         id: genId('cat'),
         name: '健康',
@@ -1995,12 +2176,7 @@ function loadDefaultData() {
           { id: genId('item'), name: '写日记', archived: false }
         ]
       }
-    ],
-    records: {},
-    foods: [],
-    diets: {},
-    dietGoals: { breakfast: 500, lunch: 700, dinner: 600, total: 2000 }
-  };
+  ];
   ensureDietCategory();
   saveData();
 }
@@ -2210,10 +2386,20 @@ async function signOutUser() {
       body: JSON.stringify({ session_token: null })
     }).catch(() => {});
   }
+  const uid = sync.user ? sync.user.id : null;
   clearAuthSession();
   if (sync.timer) { clearInterval(sync.timer); sync.timer = null; }
-  if (sync.user) localStorage.removeItem(`checkin_app_data_${sync.user.id}`);
-  state = { categories: [], records: {} };
+  if (sync.pushTimer) { clearTimeout(sync.pushTimer); sync.pushTimer = null; }
+  if (uid) {
+    localStorage.removeItem(`checkin_app_data_${uid}`);
+    // 基线指纹跟着账号走：不清掉的话，下次同账号登录时本地缓存已空、
+    // 云端指纹又恰好等于旧基线，会被判成「推本地」，用空数据覆盖云端
+    localStorage.removeItem('checkin_sync_base_' + uid);
+  }
+  sync.baseFp = '';
+  sync.conflict = null;
+  renderSyncConflictBar();
+  state = makeEmptyState();
   document.getElementById('authOverlay').classList.remove('hidden');
   document.getElementById('authEmail').value = '';
   document.getElementById('authPassword').value = '';
@@ -2234,7 +2420,7 @@ function enterApp() {
 // ===== Cloud Sync (user-isolated via session token) =====
 /* ==========================================================================
    03 · 云同步：拉取 / 推送 / 状态显示
-   整包 JSONB 覆盖式同步，1.5s 防抖
+   整包 JSONB 同步，1.5s 防抖；拉取前先做三方比较，两边都改过就交给用户
    ========================================================================== */
 function updateSyncStatus(status, text) {
   const dot = document.getElementById('syncDot');
@@ -2255,23 +2441,113 @@ function authHeaders() {
 }
 
 async function fetchCloudData() {
-  if (!sync.user) return null;
+  if (!sync.user) return { ok: false, error: 'not-logged-in' };
   try {
     const url = `${SUPABASE_URL}/rest/v1/checkin_data?user_key=eq.${encodeURIComponent(sync.user.id)}&select=data,updated_at`;
     const res = await fetch(url, { headers: authHeaders() });
-    if (!res.ok) return null;
+    if (!res.ok) return { ok: false, error: 'http-' + res.status };
     const rows = await res.json();
-    return rows.length > 0 ? rows[0] : null;
+    return { ok: true, row: rows.length > 0 ? rows[0] : null };
   } catch(e) {
     console.error('Fetch cloud error:', e);
-    return null;
+    return { ok: false, error: 'network' };
   }
+}
+
+// ===== 内容指纹：判断「谁改过」的唯一依据 =====
+// 不比时间戳，也不比 _rev 大小：两台设备的时钟会漂，rev 是各自从 0 数的，
+// 换设备、清缓存之后完全不可比。只比内容本身。
+// 序列化必须先稳定（key 排序），否则云端 JSON 解析出来的 key 顺序与本地不同，
+// 一模一样的数据会被算成两个指纹，每次同步都误判成冲突。
+function stableStringify(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+  return '{' + Object.keys(v).sort()
+    .filter(k => v[k] !== undefined)
+    .map(k => JSON.stringify(k) + ':' + stableStringify(v[k]))
+    .join(',') + '}';
+}
+
+// 同步元信息不参与比对：_rev 每次本地提交都变，_updated_at 每次落盘都变，
+// schemaVersion 是结构版本，都不代表「内容改了」
+function syncPayload(s) {
+  const o = {};
+  Object.keys(s || {}).forEach(k => {
+    if (k === '_rev' || k === '_updated_at' || k === 'schemaVersion') return;
+    o[k] = s[k];
+  });
+  return o;
+}
+
+function stateFingerprint(s) {
+  const raw = stableStringify(syncPayload(s));
+  let h = 5381;
+  for (let i = 0; i < raw.length; i++) h = ((h << 5) + h + raw.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36) + '-' + raw.length;
+}
+
+// 基线指纹存独立 key：它是「这台设备上次看到的一致状态」，
+// 不是业务数据，不能跟着 state 一起同步出去
+function baseFpKey() {
+  return 'checkin_sync_base_' + (sync.user ? sync.user.id : 'anon');
+}
+
+function loadBaseFp() {
+  try { return localStorage.getItem(baseFpKey()) || ''; } catch(e) { return ''; }
+}
+
+function saveBaseFp(fp) {
+  sync.baseFp = fp || '';
+  try {
+    if (fp) localStorage.setItem(baseFpKey(), fp);
+    else localStorage.removeItem(baseFpKey());
+  } catch(e) {}
+}
+
+// 「本机没有值得同步上去的东西」。
+// 注意不能只看 categories.length：ensureDietCategory 会给空状态塞一个内置饮食分类，
+// 新设备一进来就被判定成「有数据」，那就又回到覆盖云端的歧路上了。
+function isEmptyState(s) {
+  if (!s) return true;
+  const cats = s.categories || [];
+  const hasUserCat = cats.some(c => c && !c.builtin);
+  const hasItem = cats.some(c => (c.items || []).length > 0);
+  const hasRecords = s.records && Object.keys(s.records).length > 0;
+  const hasDiets = s.diets && Object.keys(s.diets).length > 0;
+  const hasFoods = (s.foods || []).length > 0;
+  return !hasUserCat && !hasItem && !hasRecords && !hasDiets && !hasFoods;
+}
+
+// 三方比较的唯一判定点。纯函数，便于测试。
+//   equal    两边一样，什么都不用做
+//   pull     本地没动过 → 用云端
+//   push     云端没动过 → 用本地
+//   conflict 两边都动过 → 不猜，交给用户
+function decideSync(localFp, cloudFp, baseFp, localEmpty) {
+  if (localFp === cloudFp) return 'equal';
+  // 本机是空的（新设备 / 刚登出重登 / 缓存被清）：没有任何东西值得覆盖云端
+  if (localEmpty) return 'pull';
+  if (baseFp && localFp === baseFp) return 'pull';
+  if (baseFp && cloudFp === baseFp) return 'push';
+  // 没有基线又两边都有内容：不猜，交给用户
+  return 'conflict';
+}
+
+function applyCloudState(cloudData) {
+  state = cloudData || makeEmptyState();
+  ensureStateShape();
+  persist();
+  saveBaseFp(stateFingerprint(state));
+  paintCurrentTab();   // 云端覆盖本地后，当前屏幕整块重画
 }
 
 async function pushCloudData() {
   if (!sync.user || sync.inFlight) return false;
   sync.inFlight = true;
   updateSyncStatus('syncing', '同步中...');
+  // 推送期间用户可能又改了数据，基线要记「这次真正推上去的那一版」，
+  // 不是请求返回时内存里的那一版，否则下次拉取会误判成云端落后
+  const pushedFp = stateFingerprint(state);
   try {
     const url = `${SUPABASE_URL}/rest/v1/checkin_data?on_conflict=user_key`;
     const payload = {
@@ -2288,6 +2564,7 @@ async function pushCloudData() {
     if (res.ok) {
       updateSyncStatus('online', '已同步');
       sync.lastAt = Date.now();
+      saveBaseFp(pushedFp);   // 推上去的这版就是新的共同基线
       return true;
     } else {
       updateSyncStatus('offline', '同步失败');
@@ -2302,41 +2579,91 @@ async function pushCloudData() {
 
 function scheduleCloudPush() {
   if (!sync.user) return;
+  if (sync.conflict) return;   // 冲突未裁决前不推，免得把另一台设备的改动冲掉
   if (sync.pushTimer) clearTimeout(sync.pushTimer);
   sync.pushTimer = setTimeout(() => pushCloudData(), 1500);
 }
 
 async function syncFromCloud() {
   if (!sync.user || sync.inFlight) return;
+  if (sync.conflict) { renderSyncConflictBar(); return; }   // 等用户裁决，不自动处理
   updateSyncStatus('syncing', '同步中...');
-  const cloudRow = await fetchCloudData();
-  if (!cloudRow) {
-    // No cloud data yet. If this device has no local cache either, it's a brand
-    // new user → seed default data (which also pushes to cloud). Otherwise push local.
+  const res = await fetchCloudData();
+
+  // 请求失败和「云端确实没有数据」必须分开：
+  // 以前两者都返回 null，断网时会把本地旧数据当成权威推上去
+  if (!res.ok) {
+    updateSyncStatus('offline', res.error === 'network' ? '网络错误' : '同步失败');
+    return;
+  }
+
+  if (!res.row) {
+    // 云端还没有这条记录：本设备也没有缓存 → 新用户，种默认数据
+    // 否则把本地数据推上去
     if (!localStorage.getItem(getStorageKey())) {
       loadDefaultData();
+      saveBaseFp(stateFingerprint(state));
     } else {
       await pushCloudData();
     }
     return;
   }
 
-  const cloudData = cloudRow.data;
-  const cloudTime = new Date(cloudRow.updated_at).getTime();
-  const localTime = state._updated_at ? new Date(state._updated_at).getTime() : 0;
-
-  if (cloudTime > localTime) {
-    state = cloudData;
-    ensureStateShape();
-    localStorage.setItem(getStorageKey(), JSON.stringify(state));
-    paintCurrentTab();   // 云端覆盖本地后，当前屏幕整块重画
+  const cloudData = res.row.data || {};
+  const act = decideSync(stateFingerprint(state), stateFingerprint(cloudData), loadBaseFp(), isEmptyState(state));
+  if (act === 'pull') {
+    applyCloudState(cloudData);
     updateSyncStatus('online', '已同步');
-  } else if (localTime > cloudTime) {
+  } else if (act === 'push') {
     await pushCloudData();
-  } else {
+  } else if (act === 'equal') {
+    saveBaseFp(stateFingerprint(state));
     updateSyncStatus('online', '已同步');
   }
+  else {
+    showSyncConflict(cloudData, res.row.updated_at);
+  }
   sync.lastAt = Date.now();
+}
+
+// ===== 冲突提示条：只在「两边都改过」时出现 =====
+function showSyncConflict(cloudData, updatedAt) {
+  sync.conflict = { data: cloudData, updatedAt: updatedAt || '' };
+  updateSyncStatus('conflict', '发现冲突');
+  renderSyncConflictBar();
+}
+
+function renderSyncConflictBar() {
+  const bar = document.getElementById('syncConflictBar');
+  if (!bar) return;
+  if (!sync.conflict) { bar.style.display = 'none'; return; }
+  let when = '';
+  if (sync.conflict.updatedAt) {
+    const d = new Date(sync.conflict.updatedAt);
+    if (!isNaN(d.getTime())) when = d.toLocaleString('zh-CN', { hour12: false });
+  }
+  bar.style.display = 'flex';
+  bar.innerHTML = `
+    <span class="conflict-text">⚠️ 另一台设备也改过数据${when ? '（' + escapeHtml(when) + '）' : ''}，两边都有新内容，请选择保留哪一份：</span>
+    <span class="conflict-actions">
+      <button class="btn btn-outline btn-sm" onclick="resolveSyncConflict('cloud')">用云端的</button>
+      <button class="btn btn-primary btn-sm" onclick="resolveSyncConflict('local')">用本机的</button>
+    </span>`;
+}
+
+async function resolveSyncConflict(choice) {
+  const c = sync.conflict;
+  if (!c) return;
+  sync.conflict = null;
+  renderSyncConflictBar();
+  if (choice === 'cloud') {
+    applyCloudState(c.data);
+    updateSyncStatus('online', '已用云端数据覆盖本机');
+  } else {
+    saveBaseFp('');            // 强制走一次完整推送
+    await pushCloudData();
+    updateSyncStatus('online', '已用本机数据覆盖云端');
+  }
 }
 
 function startPeriodicSync() {
@@ -2366,11 +2693,11 @@ function renderCloudStatus() {
         数据自动云端同步，多设备登录即可同步
       </div>
     `;
-    updateSyncStatus('online', '已同步');
+    // 有冲突在等裁决时不要盖掉「发现冲突」的状态
+    if (!sync.conflict) updateSyncStatus('online', '已同步');
   } else {
     statusDisplay.innerHTML = `<span class="cloud-status-badge disabled">未登录</span>`;
-  }
-}
+  }}
 
 /* ==========================================================================
    04 · 通用工具：id · 日期 · tab 切换
@@ -2441,6 +2768,7 @@ let renderPending = false;
 // 后者用于改动散落在多个分支里的函数，避免为了包一层 commit 把逻辑拆碎。
 function commit(mutate) {
   if (typeof mutate === 'function') mutate();
+  state._rev = (Number(state._rev) || 0) + 1;   // 记一笔「本地又改了一版」
   persist();
   scheduleRender();
 }
@@ -3495,7 +3823,7 @@ function itemStatsRows(cat, start, end, totalDays, color) {
     if (!isQuantItem(item)) {
       return {
         name: item.name, quant: false, archived: archived, archivedTag: archivedTag,
-        tagHtml: '', freqCurrent: count, freqSuffix: String(totalDays), pct: pct,
+        tagHtml: '', freqCurrent: count, freqSuffix: `${totalDays}天`, pct: pct,
         trend: '', metaLeft: `完成率 ${pct}%`, metaRight: '',
         streak: streak, count: totalCount, color: color, onclick: null
       };
@@ -4028,7 +4356,7 @@ function editCategoryName(catId) {
   if (!cat) return;
   openEditModal('编辑分类', '',
     `<label>分类名称</label>
-     <input class="modal-input" id="modalInput1" maxlength="20" value="${escapeHtml(cat.name)}">`,
+     <input class="modal-input" id="modalInput1" maxlength="20" value="${escAttr(cat.name)}">`,
     { type: 'editCat', catId: catId });
 }
 
@@ -4039,14 +4367,14 @@ function editItemConfig(catId, itemId) {
   const hasQuant = isQuantItem(item);
   openEditModal('编辑打卡项', '',
     `<label>打卡项名称</label>
-     <input class="modal-input" id="modalInput1" maxlength="30" value="${escapeHtml(item.name)}">
+     <input class="modal-input" id="modalInput1" maxlength="30" value="${escAttr(item.name)}">
      <label class="quant-toggle-row">
        <input type="checkbox" id="modalQuantOn" ${hasQuant ? 'checked' : ''} onchange="toggleQuantFields()">
        启用量化配置（记录每日完成数值）
      </label>
      <div id="quantFields" style="display:${hasQuant ? 'block' : 'none'}">
        <label>量化单位（如：杯、分钟、公里、个、元）</label>
-       <input class="modal-input" id="modalUnit" maxlength="10" placeholder="杯" value="${item.quant ? escapeHtml(item.quant.unit) : ''}">
+       <input class="modal-input" id="modalUnit" maxlength="10" placeholder="杯" value="${item.quant ? escAttr(item.quant.unit) : ''}">
        <label>目标数值（每天，可为负）</label>
        <div class="num-input-wrap">
          <button type="button" class="sign-toggle" onclick="toggleSign('modalTarget')" title="切换正负号（±）" aria-label="切换正负号">±</button>
@@ -4078,7 +4406,7 @@ function openQuantInput(itemId) {
          value="${cur}" placeholder="实际完成数值（可为负）" oninput="sanitizeNumberInput(this)">
        <span class="quant-unit">${escapeHtml(item.quant.unit)}</span>
      </div>
-     <div class="quant-input-tip">填写 0 或留空 = 取消本次打卡；可输入负值（如体重、盈亏）。${item.quant.target} ${item.quant.unit} 才算达标</div>`,
+     <div class="quant-input-tip">填写 0 或留空 = 取消本次打卡；可输入负值（如体重、盈亏）。${item.quant.target} ${escapeHtml(item.quant.unit)} 才算达标</div>`,
     { type: 'quantInput', itemId: itemId }, '保存');
 }
 
@@ -4224,7 +4552,7 @@ function renderFoodBrandOptions() {
   const prev = sel.value;
   const brands = [...new Set(getFoods().map(f => (f.brand || '').trim()).filter(Boolean))];
   brands.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-  sel.innerHTML = brands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')
+  sel.innerHTML = brands.map(b => `<option value="${escAttr(b)}">${escapeHtml(b)}</option>`).join('')
     + `<option value="__new__">＋ 新建品牌…</option>`;
   if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
   // 仅同步“新建品牌”输入框的显隐，不抢焦点（避免每次重渲染跳焦点）
@@ -4323,7 +4651,7 @@ function addFood() {
 function openFoodAddModal() {
   const brands = [...new Set(getFoods().map(f => (f.brand || '').trim()).filter(Boolean))];
   brands.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-  const options = brands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')
+  const options = brands.map(b => `<option value="${escAttr(b)}">${escapeHtml(b)}</option>`).join('')
     + `<option value="__new__">＋ 新建品牌…</option>`;
 
   openEditModal('新增食物记录', '同一品牌会自动归到同一块',
@@ -4374,10 +4702,10 @@ function editFood(id) {
        <option value="drink" ${(f.kind || 'food') === 'drink' ? 'selected' : ''}>🥤 饮品</option>
      </select>
      <label>品牌</label>
-     <input class="modal-input" id="modalFoodBrand" maxlength="20" list="modalFoodBrandList" value="${escapeHtml(f.brand)}">
-     <datalist id="modalFoodBrandList">${brands.map(b => `<option value="${escapeHtml(b)}"></option>`).join('')}</datalist>
+     <input class="modal-input" id="modalFoodBrand" maxlength="20" list="modalFoodBrandList" value="${escAttr(f.brand)}">
+     <datalist id="modalFoodBrandList">${brands.map(b => `<option value="${escAttr(b)}"></option>`).join('')}</datalist>
      <label>食物名称</label>
-     <input class="modal-input" id="modalFoodName" maxlength="30" value="${escapeHtml(f.name)}">
+     <input class="modal-input" id="modalFoodName" maxlength="30" value="${escAttr(f.name)}">
      <label>热量（千卡）</label>
      <input class="modal-input" id="modalFoodKcal" type="text" inputmode="numeric" value="${f.kcal}">`,
     { type: 'editFood', id: id }, '保存');
@@ -4818,6 +5146,14 @@ function csvCell(v) {
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
+// 文本单元格专用：Excel / Numbers 会把 = + - @ 开头的格子当公式执行，
+// 打卡项名字里写个 =HYPERLINK(...) 就是一封钓鱼邮件。数值列不要用它，
+// 否则合法的负数 -5 会被写成 '-5。
+function csvTextCell(v) {
+  const s = (v == null) ? '' : String(v);
+  return csvCell(/^[=+\-@\t\r]/.test(s) ? "'" + s : s);
+}
+
 function exportQuantCsv(start, end, itemIds) {
   const picked = collectQuantItems().filter(o => itemIds.indexOf(o.item.id) !== -1);
   if (picked.length === 0) { showToast('没有可导出的指标'); return; }
@@ -4827,7 +5163,7 @@ function exportQuantCsv(start, end, itemIds) {
   if (keys.length === 0) { showToast('时间范围无效'); return; }
 
   const header = ['日期'].concat(picked.map(o => `${o.item.name}(${o.item.quant.unit})`));
-  const lines = [header.map(csvCell).join(',')];
+  const lines = [header.map(csvTextCell).join(',')];
   keys.forEach(key => {
     const recs = getDayRecords(key);
     const row = [key];
@@ -4943,20 +5279,30 @@ function importData(event) {
 function clearAllData() {
   if (!confirm('⚠️ 此操作将清空所有打卡分类和记录，且不可恢复！确定继续吗？')) return;
   if (!confirm('再次确认：真的要清空全部数据吗？')) return;
-  state = { categories: [], records: {}, foods: [], diets: {}, dietGoals: { breakfast: 500, lunch: 700, dinner: 600, total: 2000 } };
+  state = makeEmptyState();
   commit();
   showToast('所有数据已清空');
 }
 
 /* ==========================================================================
    15 · 渲染工具：转义 · toast
-   注意：这里是全站唯一的 HTML 转义入口
+   注意：这里是全站唯一的 HTML 转义入口，两个函数分工不同：
+     escapeHtml  文本节点（<span>${...}</span>）
+     escAttr     属性值（value="${...}" / title="${...}"）
+   浏览器把文本节点里的 " 原样保留，所以属性里必须用 escAttr，
+   否则名字里带一个引号就能从 value 里逃出来接上 onfocus=...
    ========================================================================== */
 
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function escAttr(str) {
+  return escapeHtml(str == null ? '' : String(str))
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function showToast(msg) {
@@ -4972,6 +5318,7 @@ function showToast(msg) {
 
 function initApp() {
   loadData();
+  sync.baseFp = loadBaseFp();   // 这台设备上次与云端一致时的内容指纹
   paintCurrentTab();
 
   // Sync from cloud (pull user's data)

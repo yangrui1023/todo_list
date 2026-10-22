@@ -18,6 +18,9 @@ node tests/run.js
 | `test_diet_trend.js` | 三餐 + 全天合计接入趋势图与统计页 |
 | `test_diet_align.js` | 饮食分类与普通分类的行为对齐（菜单 / 开关 / 归档 / 删除 / 连续天数） |
 | `test_adapter.js` | 追踪条目适配器：entry 形状统一、注册表完整、渲染层无形态分支、加新形态只改注册表 |
+| `test_security.js` | 两个转义出口（文本 / 属性）、量化单位注入、备注 title、id 白名单、CSV 公式注入 |
+| `test_migrate.js` | 数据结构版本：老数据升级、缺字段补默认、显式 null 不被覆盖、幂等、脏数据兜底 |
+| `test_sync.js` | 同步三方比较矩阵、冲突提示与裁决、登出重登不清空云端、断网不误推 |
 
 ## 分类形态的护栏
 
@@ -59,6 +62,44 @@ node tests/compare_render.js /tmp/base.html
 
 它把新旧两份文件各装进独立沙箱，喂同一份 state，逐字比对 6 个容器的 innerHTML
 和 22 组折线图 SVG。只忽略标签间空白和 class 属性里多余空格。
+
+## 转义只有两个出口，别自己拼
+
+浏览器把文本节点里的 `"` 原样保留，所以两件事必须分开做：
+
+- `escapeHtml(x)` —— 文本节点（`<span>${...}</span>`）
+- `escAttr(x)` —— 属性值（`value="${...}"` / `title="${...}"`）
+
+`value="${escapeHtml(x)}"` 是错的：名字里一个引号就能从 value 里逃出来接上
+`onfocus=...`。`test_security.js` 有一条源码护栏，专门扫这个写法。
+
+另外两条防线不靠转义：
+
+- **id 白名单**（`^[A-Za-z0-9_-]{1,64}$`）：id 会被拼进 `onclick="fn('id')"`，
+  别人发来的 JSON 备份里写个脏 id 就等于凭空多一个事件处理器。`sanitizeState()`
+  会换掉非法 id，并把 `records` 里的引用一起改过来。
+- **CSV 公式前缀**：Excel 会把 `=` 开头的格子当公式执行。文本列走 `csvTextCell()`，
+  数值列仍用 `csvCell()`（否则合法的 `-5` 会被写成 `'-5`）。
+
+## 同步判定：三方比较，不猜
+
+`decideSync(localFp, cloudFp, baseFp, localEmpty)` 是唯一判定点：
+
+| 情况 | 结果 |
+|---|---|
+| 两边内容一致 | `equal` |
+| 本地是空的（新设备 / 重登） | `pull`，绝不覆盖云端 |
+| 本地没动过 | `pull` |
+| 云端没动过 | `push` |
+| 两边都改过 / 没有基线且两边都有内容 | `conflict`，弹条让用户选 |
+
+- 比对用的是**内容指纹**（`stateFingerprint`，key 排序后 hash），不是时间戳。
+  两台设备的时钟会漂，`_rev` 也是各自从 0 数的，都不可比。
+- 基线指纹存独立 key `checkin_sync_base_<uid>`，登出时要一起删 ——
+  否则下次同账号登录、本地缓存已空、云端恰好等于旧基线，会被判成「推本地」，
+  用空数据清空云端。
+- `fetchCloudData()` 区分「请求失败」和「云端确实没数据」。
+  以前两者都返回 `null`，断网时会把本地旧数据当成权威推上去。
 
 ## 写测试时的两个坑
 
