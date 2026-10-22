@@ -37,7 +37,12 @@
 
 ## 怎么验证真的关上了
 
-在任意页面的控制台里跑（key 就是源码里那个，本来公开）：
+两种方式，任选一种。**下面的 JS 不能贴到终端里**，`(` `)` `?` `&` 是 shell 的语法，
+会报 `sh: parse error near ')'`，请求根本没发出去。
+
+### 方式一：浏览器控制台（最省事）
+
+打开线上页面按 F12 → Console → 粘贴整段回车（key 就是源码里那个，本来公开）：
 
 ```js
 fetch('https://rmqyyfoncddnfcaqiude.supabase.co/rest/v1/app_users?select=email&limit=1', {
@@ -48,8 +53,22 @@ fetch('https://rmqyyfoncddnfcaqiude.supabase.co/rest/v1/app_users?select=email&l
 }).then(r => r.json()).then(console.log)
 ```
 
-执行 02 之前：返回一串邮箱 → **裸奔**。
-执行 02 之后：返回 `[]` 或 401/403 → 关上了。
+### 方式二：终端（URL 必须用单引号包住，且写在一行）
+
+```bash
+curl -s 'https://rmqyyfoncddnfcaqiude.supabase.co/rest/v1/app_users?select=email&limit=1' -H 'apikey: sb_publishable_tkJEszfUG7UXJxjvRPiuIw_QjpjJ2Ay' -H 'Authorization: Bearer sb_publishable_tkJEszfUG7UXJxjvRPiuIw_QjpjJ2Ay'
+```
+
+只想知道「关没关上」而不想看邮箱，把 `select=email` 换成 `select=id`，
+返回 `[]` 就是关上了。
+
+### 判定标准
+
+| 时机 | 返回 | 含义 |
+|---|---|---|
+| 执行 02 之前 | 一串邮箱 / 一串 id | **裸奔**，正常，还没执行第 4 步 |
+| 执行 02 之后 | `[]` | 关上了 |
+| 执行 02 之后 | 401 / 403 + 错误对象 | 也关上了（网关层就拒了） |
 
 ## 将来加功能时注意
 
