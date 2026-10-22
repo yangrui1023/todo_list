@@ -1339,17 +1339,12 @@ body {
 .food-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px; }
 
 /* ===== 打卡页 · 饮食记录（复用普通分类卡片，不自造一套）===== */
-/* 全天合计胶囊：普通分类是 1/3，饮食是「已摄入 / 全天目标 千卡」 */
-.category-count.diet-count {
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.category-count.diet-count.over { background: var(--warning-light); color: var(--warning); }
+/* 热量总量做成分类名旁的小标签，位置与普通打卡项的 🎯 目标标签一致 */
+.quant-mini.diet-kcal { font-variant-numeric: tabular-nums; }
+.quant-mini.diet-kcal.over { background: var(--warning-light); color: var(--warning); }
 /* 餐次行勾选后不划线——它是「这一餐记完了」，不是待办的划掉 */
 .checkin-item.diet-meal-item.checked .checkin-item-name { color: var(--text); text-decoration: none; }
 .checkin-item.diet-meal-item .quant-badge { font-variant-numeric: tabular-nums; }
-.diet-row-caret { font-size: 15px; line-height: 1; color: var(--text-muted); }
 
 /* 记账弹窗：增删改都是即时生效，不存在「取消」，只保留一个「完成」 */
 #editModal.diet-modal .modal-actions .btn-outline { display: none; }
@@ -1718,7 +1713,7 @@ body {
       </div>
       <label data-page-node-id="JgLOtan4MIXkqy329gZZo5" class="add-cat-check" for="newCatCountInStats">
         <input data-page-node-id="dfGuFK3Td1lgVrkhXam2Ae" checked id="newCatCountInStats" type="checkbox"><!--pnid:WSZ4Zt5I8j9V6wZtQRLTnX-->
-        纳入统计（参与总打卡次数 / 完成率统计）
+        纳入统计（计入今日完成、总打卡次数与完成率）
       </label>
       <div data-page-node-id="ApoN5hNgpjkiEt0wOP6SbG" style="margin-top:12px">
         <button data-page-node-id="Vi0OVakdIQnKOU4qzVgAsv" class="btn btn-primary" onclick="addCategory()"><!--pnid:TPUywVgt2qv5D7jNvargpR-->+ 添加分类</button>
@@ -1821,7 +1816,9 @@ let state = {
   records: {}, // { "2026-08-10": ["item_id1", "item_id2"] }
   foods: [],   // [{ id, kind: 'drink'|'food', brand, name, kcal }]
   diets: {},   // { "2026-08-10": [{ id, meal:'breakfast'|'lunch'|'dinner', foodId, name, brand, kcal, qty }] }
-  dietGoals: { breakfast: 500, lunch: 700, dinner: 600, total: 2000 } // 每餐热量目标（千卡），null = 不设目标
+  dietGoals: { breakfast: 500, lunch: 700, dinner: 600, total: 2000 }, // 每餐热量目标（千卡），null = 不设目标
+  dietMealNotes: {}, // { "2026-08-10": { breakfast: "备注" } } 每餐备注，与普通打卡项备注同构
+  dietRemoved: false // 用户彻底删除饮食分类后置 true，避免 ensureDietCategory 又把它建回来
 };
 
 // 统一补全 state 结构：旧本地缓存 / 旧 JSON 备份 / 云端旧记录都可能缺 foods / diets / dietGoals
@@ -1834,6 +1831,8 @@ function ensureStateShape() {
   if (!state.dietGoals || typeof state.dietGoals !== 'object') {
     state.dietGoals = Object.assign({}, DIET_GOAL_DEFAULT);
   }
+  if (!state.dietMealNotes || typeof state.dietMealNotes !== 'object') state.dietMealNotes = {};
+  if (typeof state.dietRemoved !== 'boolean') state.dietRemoved = false;
   // 旧版本只有三餐目标：补全天总目标（用户可单独改，不与三餐相加联动）
   if (state.dietGoals.total === undefined) state.dietGoals.total = DIET_GOAL_DEFAULT.total;
   // 旧记录没有 meal 字段：默认归到午餐（正餐），避免历史数据凭空消失
@@ -1851,6 +1850,8 @@ function ensureStateShape() {
 // 饮食记录作为一个「内置分类」存在 state.categories 里，
 // 排序 / 改名 / 启用停用 / 纳入统计 全部复用已有的分类链路，不另开一套 UI。
 function ensureDietCategory() {
+  // 用户已经彻底删除过饮食分类：不再自动重建，只有清空数据才会回来
+  if (state.dietRemoved) return null;
   let cat = (state.categories || []).find(c => c && c.builtin === 'diet');
   if (!cat) {
     cat = {
@@ -2473,6 +2474,19 @@ function changeCalMonth(delta) {
   renderCalendar();
 }
 
+// 日历每天的数字：与打卡页口径一致 —— 普通已打卡项 + 饮食已记录餐次
+function dayCheckinCount(dateKey) {
+  let count = getDayRecords(dateKey).filter(isChecked).length;
+  const dcat = getDietCat();
+  if (dcat && isCatEnabled(dcat) && !dcat.archived) {
+    const entries = getDiets()[dateKey];
+    if (Array.isArray(entries) && entries.length) {
+      count += DIET_MEAL_KEYS.filter(k => entries.some(e => normMeal(e.meal) === k)).length;
+    }
+  }
+  return count;
+}
+
 function renderCalendar() {
   const label = document.getElementById('calMonthLabel');
   label.textContent = `${calMonth.getFullYear()}年${calMonth.getMonth() + 1}月`;
@@ -2491,7 +2505,7 @@ function renderCalendar() {
   for (let i = 1; i < firstDow; i++) {
     const d = new Date(year, month, i - firstDow + 1);
     const key = formatDate(d);
-    const cnt = getDayRecords(key).filter(isChecked).length;
+    const cnt = dayCheckinCount(key);
     html += `<div class="cal-day other" onclick="selectCalDate('${key}')">
       ${d.getDate()}<div class="cal-count ${cnt === 0 ? 'zero' : ''}">${cnt}</div>
     </div>`;
@@ -2499,7 +2513,7 @@ function renderCalendar() {
 
   for (let day = 1; day <= daysInMonth; day++) {
     const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const cnt = getDayRecords(key).filter(isChecked).length;
+    const cnt = dayCheckinCount(key);
     const cls = ['cal-day'];
     if (key === todayKey) cls.push('today');
     if (key === curKey) cls.push('selected');
@@ -2591,17 +2605,18 @@ function renderCheckin() {
   const activeCats = state.categories.filter(c =>
     !c.archived && isCatEnabled(c) && (!c.startDate || dateKey >= c.startDate));
 
-  // 今日完成：普通打卡项 + （饮食分类被纳入统计时）三餐
+  // 今日完成：普通打卡项 + （饮食分类被纳入统计时）设了目标的餐次
+  // 分母只算「设了目标的餐」，不随当天有没有记录而变化，避免完成率来回跳
   const countedCats = activeCats.filter(c => isCatCounted(c));
   const plainItems = countedCats
     .filter(c => !isDietCat(c))
     .flatMap(c => (c.items || []).filter(i => !i.archived));
-  const dietCounted = countedCats.some(isDietCat) ? visibleDietMeals(dateKey) : [];
+  const dietTracked = countedCats.some(isDietCat) ? dietTrackedMeals(dateKey) : [];
 
-  const total = plainItems.length + dietCounted.length;
+  const total = plainItems.length + dietTracked.length;
   const doneIds = getDayDoneIds(dateKey);
   const done = plainItems.filter(i => doneIds.includes(i.id)).length
-    + dietCounted.filter(m => m.reached).length;
+    + dietTracked.filter(m => m.reached).length;
   const pct = total > 0 ? Math.round(done / total * 100) : 0;
 
   document.getElementById('progressCount').innerHTML =
@@ -2628,7 +2643,7 @@ function renderCheckin() {
     const notCounted = !isCatCounted(cat);
     html += `<div class="category-card">
       <div class="category-header">
-        <span class="category-name">${escapeHtml(cat.name)}${notCounted ? ' <span class="nocount-tag">不计完成</span>' : ''}</span>
+        <span class="category-name">${escapeHtml(cat.name)}${notCounted ? ' <span class="nocount-tag">不计统计</span>' : ''}</span>
         <span class="category-count">${catDone}/${activeItems.length}</span>
       </div>`;
 
@@ -3063,10 +3078,12 @@ function renderStats() {
   }
 
   // Summary only counts categories with countInStats enabled
-  const statsItems = state.categories
-    .filter(c => isCatCounted(c))
-    .flatMap(c => c.items);
-  const total = statsItems.length;
+  const statsCats = state.categories.filter(c => isCatCounted(c) && isCatEnabled(c));
+  const statsItems = statsCats.flatMap(c => (c.items || []));
+  // 饮食的三餐同样算「打卡项」：分母 = 设了目标的餐数，与打卡页进度条同一口径
+  const dietSumCat = statsCats.find(isDietCat);
+  const dietSumMeals = dietSumCat ? dietGoalMeals() : [];
+  const total = statsItems.length + dietSumMeals.length;
 
   // Summary
   let totalCheckins = 0;
@@ -3082,6 +3099,19 @@ function renderStats() {
       d.setDate(d.getDate() + 1);
     }
   });
+  if (dietSumMeals.length) {
+    const d = new Date(start);
+    while (d <= end) {
+      const key = formatDate(d);
+      dietSumMeals.forEach(mealKey => {
+        if (dietMealHasEntries(key, mealKey)) {
+          totalCheckins++;
+          activeDays.add(key);
+        }
+      });
+      d.setDate(d.getDate() + 1);
+    }
+  }
 
   const avgPerDay = totalCheckins / totalDays;
   const completionRate = total > 0 ? Math.round(totalCheckins / (total * totalDays) * 100) : 0;
@@ -3113,19 +3143,18 @@ function renderStats() {
   // Color palette for bars
   const colors = ['#4f46e5', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
 
+  const endKey = formatDate(end);
   state.categories.forEach((cat, catIdx) => {
-    // 饮食三餐本身就是量化指标：始终出卡片和趋势图。
-    // 「计入今日完成」开关只影响打卡页完成度，不决定统计页可见性。
+    // 停用 / 不计统计 / 开始日期未到 → 与普通分类同一套规则，不进统计页
+    if (!isCatEnabled(cat)) return;
+    if (!isCatCounted(cat)) return;
+    if (cat.startDate && endKey < cat.startDate) return;
+    // 饮食三餐是量化指标，走伪 item 出卡片与趋势图
     if (isDietCat(cat)) {
       html += dietStatsCardHtml(cat, start, end, totalDays, colors[catIdx % colors.length]);
       return;
     }
-    if (cat.items.length === 0) return;
-    // Hide non-counted categories from the stats page entirely
-    if (!isCatCounted(cat)) return;
-    // Hide categories whose start date is after the period end (not yet active)
-    const endKey = formatDate(end);
-    if (cat.startDate && endKey < cat.startDate) return;
+    if ((cat.items || []).length === 0) return;
     const color = colors[catIdx % colors.length];
     const catArchived = cat.archived;
 
@@ -3359,6 +3388,10 @@ function confirmEditModal() {
     const note = document.getElementById('modalNote').value;
     setNote(s.itemId, note);
     showToast(note.trim() ? '备注已保存' : '备注已清除');
+  } else if (s.type === 'dietNote') {
+    const note = document.getElementById('modalNote').value;
+    setDietMealNote(formatDate(currentDate), s.mealKey, note);
+    showToast(note.trim() ? '备注已保存' : '备注已清除');
   } else if (s.type === 'setStartDate') {
     const date = document.getElementById('modalStartDate').value;
     const cat = state.categories.find(c => c.id === s.catId);
@@ -3393,13 +3426,18 @@ function renderManage() {
     const archivedItems = (cat.items || []).filter(i => i.archived);
 
     const startDateTag = cat.startDate ? ` <span class="startdate-tag">📅 ${cat.startDate} 起</span>` : '';
-    html += `<div class="manage-category">
+    const catEnabled = isCatEnabled(cat);
+    html += `<div class="manage-category${catEnabled ? '' : ' disabled'}">
       <div class="manage-category-header">
-        <span class="name">${escapeHtml(cat.name)}${!isCatCounted(cat) ? ' <span class="nocount-tag">不计统计</span>' : ''}${startDateTag}</span>
+        <span class="name">${escapeHtml(cat.name)}${!isCatCounted(cat) ? ' <span class="nocount-tag">不计统计</span>' : ''}${startDateTag}${catEnabled ? '' : ' <span class="disabled-tag">已停用</span>'}</span>
         <button class="action-trigger" onclick="event.stopPropagation(); toggleCatMenu('${cat.id}')" title="更多操作" aria-label="更多操作">⋮</button>
         <div class="action-menu" id="catMenu_${cat.id}">
+          <div class="action-menu-item" onclick="event.stopPropagation(); toggleCatEnabled('${cat.id}')">
+            <span><span class="menu-icon">⏻</span>启用分类</span>
+            <span class="switch-track ${catEnabled ? 'on' : ''}"><span class="switch-knob"></span></span>
+          </div>
           <div class="action-menu-item" onclick="event.stopPropagation(); toggleCountInStats('${cat.id}')">
-            <span><span class="menu-icon">📊</span>计入今日完成</span>
+            <span><span class="menu-icon">📊</span>纳入统计</span>
             <span class="switch-track ${isCatCounted(cat) ? 'on' : ''}"><span class="switch-knob"></span></span>
           </div>
           <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); moveCategory('${cat.id}', -1)">
@@ -3506,13 +3544,15 @@ function dietManageHtml(cat) {
         <span class="diet-goal-arrow">›</span>
       </div>`;
 
+  const startDateTag = cat.startDate ? ` <span class="startdate-tag">📅 ${cat.startDate} 起</span>` : '';
+
   return `<div class="manage-category${enabled ? '' : ' disabled'}">
       <div class="manage-category-header">
-        <span class="name">${escapeHtml(cat.name)}${!isCatCounted(cat) ? ' <span class="nocount-tag">不计完成</span>' : ''}${enabled ? '' : ' <span class="disabled-tag">已停用</span>'}</span>
+        <span class="name">${escapeHtml(cat.name)}${!isCatCounted(cat) ? ' <span class="nocount-tag">不计统计</span>' : ''}${startDateTag}${enabled ? '' : ' <span class="disabled-tag">已停用</span>'}</span>
         <button class="action-trigger" onclick="event.stopPropagation(); toggleCatMenu('${cat.id}')" title="更多操作" aria-label="更多操作">⋮</button>
         <div class="action-menu" id="catMenu_${cat.id}">
-          <div class="action-menu-item" onclick="event.stopPropagation(); toggleDietEnabled('${cat.id}')">
-            <span><span class="menu-icon">⏻</span>启用饮食记录</span>
+          <div class="action-menu-item" onclick="event.stopPropagation(); toggleCatEnabled('${cat.id}')">
+            <span><span class="menu-icon">⏻</span>启用分类</span>
             <span class="switch-track ${enabled ? 'on' : ''}"><span class="switch-knob"></span></span>
           </div>
           <div class="action-menu-item" onclick="event.stopPropagation(); toggleCountInStats('${cat.id}')">
@@ -3528,8 +3568,17 @@ function dietManageHtml(cat) {
           <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); editCategoryName('${cat.id}')">
             <span><span class="menu-icon">✏️</span>编辑名称</span>
           </div>
+          <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); setCategoryStartDate('${cat.id}')">
+            <span><span class="menu-icon">📅</span>开始日期${cat.startDate ? '：' + cat.startDate : ''}</span>
+          </div>
           <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); openDietGoalModal()">
             <span><span class="menu-icon">🎯</span>三餐与全天目标</span>
+          </div>
+          <div class="action-menu-item" onclick="event.stopPropagation(); closeAllMenus(); archiveCategory('${cat.id}')">
+            <span><span class="menu-icon">📦</span>归档分类</span>
+          </div>
+          <div class="action-menu-item danger" onclick="event.stopPropagation(); closeAllMenus(); permanentDeleteCategory('${cat.id}')">
+            <span><span class="menu-icon">🗑️</span>删除分类</span>
           </div>
         </div>
       </div>
@@ -3538,14 +3587,15 @@ function dietManageHtml(cat) {
     </div>`;
 }
 
-function toggleDietEnabled(catId) {
+// 启用 / 停用：普通分类与内置饮食分类共用
+function toggleCatEnabled(catId) {
   const cat = state.categories.find(c => c.id === catId);
   if (!cat) return;
   cat.enabled = cat.enabled === false;   // false → true，其余 → false
   saveData();
   renderManage();
   renderCheckin();
-  showToast(cat.enabled === false ? '饮食记录已停用，打卡页不再显示' : '饮食记录已启用');
+  showToast(cat.enabled === false ? `「${cat.name}」已停用，打卡页不再显示` : `「${cat.name}」已启用`);
   const menu = document.getElementById('catMenu_' + catId);
   if (menu) menu.classList.add('show');
 }
@@ -3635,6 +3685,24 @@ function clearNoteNow() {
     setNote(s.itemId, '');
     showToast('备注已删除');
   }
+  closeEditModal();
+}
+
+// 餐次备注：UI 与打卡项备注完全一致，只是把 itemId 换成 mealKey
+function openDietNoteModal(mealKey) {
+  const m = dietMealMeta(mealKey);
+  const dateKey = formatDate(currentDate);
+  const note = getDietMealNote(dateKey, mealKey);
+  openEditModal(`${m.name} · 备注`, `${dateKey}`,
+    `<textarea class="modal-input note-textarea" id="modalNote" rows="3" maxlength="200" placeholder="记录备注（可选，最多200字）">${escapeHtml(note)}</textarea>
+     <div class="quant-input-tip">保存后，备注会显示在餐次旁边（小字），💬 位于行最右侧</div>
+     ${note ? `<button class="btn btn-danger btn-block" style="width:100%; margin-top:12px;" onclick="clearDietNoteNow('${mealKey}')">🗑️ 删除备注</button>` : ''}`,
+    { type: 'dietNote', mealKey: mealKey }, '保存');
+}
+
+function clearDietNoteNow(mealKey) {
+  setDietMealNote(formatDate(currentDate), mealKey, '');
+  showToast('备注已删除');
   closeEditModal();
 }
 
@@ -3758,18 +3826,28 @@ function restoreCategory(catId) {
 function permanentDeleteCategory(catId) {
   const cat = state.categories.find(c => c.id === catId);
   if (!cat) return;
-  if (!confirm(`确定彻底删除「${cat.name}」及其所有打卡项吗？\n\n⚠️ 此操作不可恢复，所有历史打卡记录将永久丢失！`)) return;
+  const isDiet = isDietCat(cat);
+  const extra = isDiet ? '\n\n⚠️ 该分类的饮食记录（食物明细、三餐目标、备注）也会一并清空。' : '';
+  if (!confirm(`确定彻底删除「${cat.name}」及其所有打卡项吗？\n\n⚠️ 此操作不可恢复，所有历史打卡记录将永久丢失！${extra}`)) return;
   if (!confirm('再次确认：真的要永久删除吗？')) return;
   // Collect all item IDs
-  const itemIds = cat.items.map(i => i.id);
+  const itemIds = (cat.items || []).map(i => i.id);
   state.categories = state.categories.filter(c => c.id !== catId);
   // Clean up records (supports both string and {id,value} entries)
   Object.keys(state.records).forEach(date => {
     state.records[date] = state.records[date].filter(r => !itemIds.includes(getRecordObj(r).id));
     if (state.records[date].length === 0) delete state.records[date];
   });
+  if (isDiet) {
+    // 与普通分类一致：彻底删除 = 数据一并清空，并记住「别再把内置分类建回来」
+    state.diets = {};
+    state.dietMealNotes = {};
+    state.dietGoals = Object.assign({}, DIET_GOAL_DEFAULT);
+    state.dietRemoved = true;
+  }
   saveData();
   renderManage();
+  renderCheckin();
   showToast('分类已彻底删除');
 }
 
@@ -4121,39 +4199,106 @@ function visibleDietMeals(dateKey) {
   return shown.length ? shown : [all[defaultDietMealIndex()]];
 }
 
+// 设了目标的餐次 = 饮食分类的「打卡项」。分母只跟目标配置有关，不随当天记录变化
+function dietGoalMeals() {
+  const g = getDietGoals();
+  return DIET_MEALS.filter(m => g[m.key] != null && g[m.key] > 0).map(m => m.key);
+}
+
+function dietTrackedMeals(dateKey) {
+  const keys = dietGoalMeals();
+  const stats = dietMealStats(dateKey);
+  return keys.map(k => stats.find(s => s.key === k)).filter(Boolean);
+}
+
+// 某餐是否有记录（只读，不给 state 补空数组）
+function dietMealHasEntries(dateKey, mealKey) {
+  const entries = getDiets()[dateKey];
+  if (!Array.isArray(entries) || entries.length === 0) return false;
+  if (mealKey === 'total') return true;
+  return entries.some(e => normMeal(e.meal) === mealKey);
+}
+
+// 连续有记录天数：与 getStreak 同一套算法（今天没记就从昨天起算）
+function getDietMealStreak(mealKey) {
+  let streak = 0;
+  const d = new Date();
+  if (!dietMealHasEntries(formatDate(d), mealKey)) d.setDate(d.getDate() - 1);
+  while (dietMealHasEntries(formatDate(d), mealKey)) {
+    streak++;
+    d.setDate(d.getDate() - 1);
+  }
+  return streak;
+}
+
+// 累计次数：与 getTotalCount 同口径（有记录的天数）
+function getDietMealTotalCount(mealKey) {
+  return Object.keys(getDiets()).filter(k => dietMealHasEntries(k, mealKey)).length;
+}
+
+// 每餐备注：与打卡项备注同构，按「日期 + 餐次」存
+function getDietMealNote(dateKey, mealKey) {
+  const day = state.dietMealNotes && state.dietMealNotes[dateKey];
+  return (day && day[mealKey]) ? String(day[mealKey]) : '';
+}
+
+function setDietMealNote(dateKey, mealKey, note) {
+  if (!state.dietMealNotes || typeof state.dietMealNotes !== 'object') state.dietMealNotes = {};
+  const text = (note || '').trim();
+  const day = state.dietMealNotes[dateKey] || {};
+  if (text) day[mealKey] = text; else delete day[mealKey];
+  if (Object.keys(day).length) state.dietMealNotes[dateKey] = day;
+  else delete state.dietMealNotes[dateKey];
+  saveData();
+  renderCheckin();
+}
+
 // 打卡页的饮食分类卡片：外层与普通分类完全相同，内容换成三餐行
 function dietCardHtml(cat, dateKey) {
   const meals = visibleDietMeals(dateKey);
+  const all = dietMealStats(dateKey);
+  const tracked = all.filter(s => s.hasGoal);       // 分母：设了目标的餐
+  const reachedCount = tracked.filter(s => s.reached).length;
   const goals = getDietGoals();
   const total = dietTotalKcal(getDietEntries(dateKey));
   const gTotal = goals.total;
   const hasTotal = gTotal != null && gTotal > 0;
   const overAll = hasTotal && total > gTotal;
-  const countText = hasTotal
-    ? `${total} / ${gTotal} 千卡`
-    : (total > 0 ? `${total} 千卡` : '未记录');
+  // 热量总量从右上角挪到分类名旁边，右上角让给 done/total，与普通分类同构
+  const kcalTag = (total > 0 || hasTotal)
+    ? `<span class="quant-mini diet-kcal${overAll ? ' over' : ''}">${hasTotal ? `${total}/${gTotal}` : total} 千卡</span>`
+    : '';
   const notCounted = !isCatCounted(cat);
 
   const rows = meals.map(s => {
     const badge = s.hasGoal ? `${s.sum}/${s.goal} 千卡` : `${s.sum} 千卡`;
     const badgeCls = s.over ? 'low' : (s.reached ? 'ok' : '');
-    const rowCls = s.over ? 'partial' : (s.reached ? 'checked' : '');
+    const hasRec = s.entries.length > 0;
+    // 与普通量化项三态一致：有记录 checked、达标 done、有记录未达标 partial
+    const rowCls = `${hasRec ? 'checked' : ''} ${s.reached ? 'done' : (hasRec ? 'partial' : '')}`;
+    const note = getDietMealNote(dateKey, s.key);
+    const noteTip = note ? escapeHtml(note).replace(/"/g, '&quot;') : '添加备注';
+    const noteText = note ? `<span class="checkin-note" title="${noteTip}">${escapeHtml(note)}</span>` : '';
+    const noteBtn = `<span class="note-btn ${note ? 'has' : ''}" title="${noteTip}" onclick="event.stopPropagation(); openDietNoteModal('${s.key}')">💬</span>`;
+    const streak = getDietMealStreak(s.key);
     return `<div class="checkin-item diet-meal-item ${rowCls}" onclick="openDietMealModal('${s.key}')">
         <div class="checkin-checkbox">
           <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
         </div>
         <span class="checkin-item-name">${escapeHtml(s.name)}</span>
+        ${noteText}
         <div class="checkin-right">
           <span class="quant-badge ${badgeCls}">${badge}</span>
-          <span class="diet-row-caret">›</span>
+          ${streak >= 2 ? `<span class="checkin-streak">🔥 ${streak}天</span>` : ''}
+          ${noteBtn}
         </div>
       </div>`;
   }).join('');
 
   return `<div class="category-card">
       <div class="category-header">
-        <span class="category-name">${escapeHtml(cat.name)}${notCounted ? ' <span class="nocount-tag">不计统计</span>' : ''}</span>
-        <span class="category-count diet-count${overAll ? ' over' : ''}">${countText}</span>
+        <span class="category-name">${escapeHtml(cat.name)}${kcalTag}${notCounted ? ' <span class="nocount-tag">不计统计</span>' : ''}</span>
+        <span class="category-count">${reachedCount}/${tracked.length}</span>
       </div>
       ${rows}
     </div>`;
@@ -4200,13 +4345,14 @@ function dietStatsCardHtml(cat, start, end, totalDays, color) {
         <div class="stats-item-meta">
           <span>${metaLeft}</span>
           <span class="quant-sum">${metaRight}</span>
+          <span>🔥 连续${getDietMealStreak(m.key)}天 · 累计${getDietMealTotalCount(m.key)}次</span>
         </div>
       </div>`;
   }).join('');
 
-  return `<div class="stats-category-card">
+  return `<div class="stats-category-card${cat.archived ? ' archived' : ''}">
       <div class="category-header">
-        <span class="category-name">${escapeHtml(cat.name)}</span>
+        <span class="category-name">${escapeHtml(cat.name)}${cat.archived ? ' <span class="archived-tag">已归档</span>' : ''}</span>
       </div>
       ${rows}
     </div>`;
@@ -4432,6 +4578,14 @@ function collectQuantItems() {
       if (isQuantItem(item)) out.push({ item: item, cat: cat });
     });
   });
+  // 饮食的三餐 / 全天合计也是量化指标：用伪 item 并进同一份清单
+  const dcat = getDietCat();
+  if (dcat) {
+    DIET_MEALS.concat([{ key: 'total', name: '全天合计' }]).forEach(m => {
+      const item = dietTrendItem(m.key);
+      if (item) out.push({ item: item, cat: dcat });
+    });
+  }
   return out;
 }
 
@@ -4475,6 +4629,12 @@ function exportQuantCsv(start, end, itemIds) {
     const recs = getDayRecords(key);
     const row = [key];
     picked.forEach(o => {
+      // 饮食伪 item：值来自 state.diets，当天没记就留空
+      if (o.item.dietMeal) {
+        const v = dietMealSumOf(key, o.item.dietMeal);
+        row.push(v == null ? '' : String(v));
+        return;
+      }
       const rec = recs.find(r => r.id === o.item.id);
       row.push(rec && isChecked(rec) ? String(rec.value) : '');
     });
