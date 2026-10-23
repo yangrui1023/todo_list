@@ -1513,6 +1513,32 @@ body {
   font-variant-numeric: tabular-nums;
   flex: 0 0 auto;
 }
+/* 按克的食物：克数是一个可点的胶囊，点击就地变输入框（没有 − ＋，加减 50 克并不自然） */
+.diet-gram-chip {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--primary);
+  border: 1px dashed var(--primary);
+  border-radius: 10px;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.diet-gram-chip:active { background: var(--primary-light); }
+.diet-gram-edit {
+  flex: 0 0 auto;
+  width: 68px;
+  font-size: 16px;          /* 低于 16px 时 iOS Safari 会放大整页 */
+  text-align: center;
+  color: var(--text);
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  padding: 2px 6px;
+  outline: none;
+  background: var(--card-bg);
+  font-variant-numeric: tabular-nums;
+}
 .diet-del {
   flex: 0 0 auto;
   width: 22px; height: 22px;
@@ -1608,6 +1634,61 @@ body {
   border-radius: 10px;
   white-space: nowrap;
 }
+/* 按克的食物：右侧是「＋ 填克重」胶囊；已加过就显示克数，点了继续加 */
+.diet-picker-add.gram {
+  font-size: 11px;
+  color: var(--primary);
+  border: 1px dashed var(--primary);
+  border-radius: 10px;
+  padding: 2px 8px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.diet-picker-added.gram { color: var(--primary); background: var(--primary-light); }
+
+/* 一行食物 + 就地展开的克重输入区（不叠二级弹窗，返回路径只有一条） */
+.diet-picker-item { border-bottom: 1px solid var(--border); }
+.diet-picker-item .diet-picker-row { border-bottom: none; }
+.diet-picker-item.expanded { background: var(--bg); }
+.diet-gram-box { padding: 2px 2px 10px; }
+.diet-gram-quick { display: flex; gap: 6px; margin-bottom: 8px; }
+.diet-gram-quick-btn {
+  flex: 1;
+  padding: 7px 0;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.diet-gram-quick-btn:active { background: var(--primary-light); border-color: var(--primary); }
+.diet-gram-input-row { display: flex; align-items: center; gap: 6px; }
+.diet-gram-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  background: var(--card-bg);
+  color: var(--text);
+  outline: none;
+}
+.diet-gram-input:focus { border-color: var(--primary); }
+.diet-gram-unit { font-size: 13px; color: var(--text-muted); flex: 0 0 auto; }
+.diet-gram-ok {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: #fff;
+  background: var(--primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.diet-gram-tip { margin-top: 6px; font-size: 11px; color: var(--text-muted); line-height: 1.5; }
 .diet-picker-sum {
   display: flex;
   align-items: center;
@@ -1939,7 +2020,8 @@ const ui = {
   foodFilter: 'all',                      // 食物库筛选：all | drink | food
   modal: null,                            // 通用弹窗上下文 { type, catId, itemId, ... }
   // 记账弹窗：餐次 / 视图 / 搜索词 / 品类筛选(all|drink|food) / 品牌筛选(空=全部)
-  diet: { meal: 'lunch', view: 'detail', kw: '', kind: 'all', brand: '' },
+  // gramFor / gramVal：正在填克重的那条食物 id 与输入中的克数（只影响 picker 展开区）
+  diet: { meal: 'lunch', view: 'detail', kw: '', kind: 'all', brand: '', gramFor: '', gramVal: '' },
   tab: 'checkin'                          // 当前 tab：checkin | stats | manage | foods
 };
 
@@ -1962,15 +2044,15 @@ const sync = {
 //   ③ SCHEMA_VERSION 加一
 // 老数据（本地缓存 / 云端旧记录 / 别人发来的 JSON 备份）进来时，会从它自己的版本
 // 一路跑到最新，跑完再统一过一遍 normalize + sanitize。
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function makeEmptyState() {
   return {
     schemaVersion: SCHEMA_VERSION,
     categories: [],
     records: {},        // { "2026-08-10": [{ id, value?, note? }] }
-    foods: [],          // [{ id, kind: 'drink'|'food', brand, name, kcal }]
-    diets: {},          // { "2026-08-10": [{ id, meal, foodId, name, brand, kcal, qty }] }
+    foods: [],          // [{ id, kind: 'drink'|'food', brand, name, kcal, unit }]
+    diets: {},          // { "2026-08-10": [{ id, meal, foodId, name, brand, kcal, qty, unit }] }
     dietGoals: Object.assign({}, DIET_GOAL_DEFAULT),
     dietMealNotes: {},  // { "2026-08-10": { breakfast: "备注" } }
     dietRemoved: false, // 用户彻底删掉饮食分类后置 true，避免又被建回来
@@ -2005,6 +2087,24 @@ const MIGRATIONS = [
           if (e && DIET_MEAL_KEYS.indexOf(e.meal) < 0) e.meal = 'lunch';
         });
       });
+    }
+  },
+  {
+    to: 3,
+    up(s) {
+      // v3 起食物有计价单位：'serving'（按份，kcal 是每份热量）
+      // 或 'gram'（按克，kcal 是每 100 克热量）。
+      // 老数据全部是「按份」，标上即可 —— 热量含义不变，界面一个像素都不动。
+      if (Array.isArray(s.foods)) {
+        s.foods.forEach(f => { if (f && typeof f === 'object' && f.unit !== 'gram') f.unit = 'serving'; });
+      }
+      if (s.diets && typeof s.diets === 'object') {
+        Object.keys(s.diets).forEach(k => {
+          const arr = s.diets[k];
+          if (!Array.isArray(arr)) return;
+          arr.forEach(e => { if (e && typeof e === 'object' && e.unit !== 'gram') e.unit = 'serving'; });
+        });
+      }
     }
   }
 ];
@@ -2095,6 +2195,10 @@ function sanitizeState(s) {
     s.diets[key] = arr.filter(e => e && typeof e === 'object').map(e => {
       e.name = clipStr(e.name, 30);
       e.brand = clipStr(e.brand, 20);
+      // 单位只认这两个值：脏数据一律当「按份」，热量算法才不会被带歪
+      if (e.unit !== 'gram') e.unit = 'serving';
+      if (!Number.isFinite(Number(e.kcal))) e.kcal = 0;
+      if (!Number.isFinite(Number(e.qty)) || Number(e.qty) <= 0) e.qty = 1;
       return e;
     });
   });
@@ -2112,6 +2216,7 @@ function sanitizeState(s) {
     f.brand = clipStr(f.brand, 20);
     if (!Number.isFinite(Number(f.kcal))) f.kcal = 0;
     if (f.kind !== 'drink') f.kind = 'food';
+    if (f.unit !== 'gram') f.unit = 'serving';
     return f;
   });
 
@@ -4007,10 +4112,13 @@ function confirmEditModal() {
     const name = ((document.getElementById('modalFoodName') || {}).value || '').trim();
     const kcalRaw = ((document.getElementById('modalFoodKcal') || {}).value || '').replace(/[^0-9.]/g, '');
     const kcal = parseFloat(kcalRaw);
+    const unitEl = document.getElementById('modalFoodUnit');
+    const nextUnit = (unitEl && unitEl.value === FOOD_UNIT_GRAM) ? FOOD_UNIT_GRAM : FOOD_UNIT_SERVING;
     if (!brand) { showToast('请填写品牌'); return; }
     if (!name) { showToast('请填写食物名称'); return; }
     if (!kcalRaw || isNaN(kcal) || kcal < 0) { showToast('请填写正确的热量数值'); return; }
-    f.kind = kind; f.brand = brand; f.name = name; f.kcal = Math.round(kcal);
+    f.kind = kind; f.brand = brand; f.name = name; f.kcal = Math.round(kcal); f.unit = nextUnit;
+    // 先写 f.unit 再同步：syncDietFoodSnapshots 用「单位是否一致」决定要不要刷热量
     syncDietFoodSnapshots(f);
     commit();
     showToast('已保存');
@@ -4635,7 +4743,7 @@ function renderFoods() {
         </div>
         ${rows.map(f => `<div class="food-row">
           <span class="food-row-name">${escapeHtml(f.name)}</span>
-          <span class="food-row-kcal">${f.kcal} 千卡</span>
+          <span class="food-row-kcal">${f.kcal} ${foodKcalBasis(f)}</span>
           <button class="btn-icon" onclick="editFood('${f.id}')" title="编辑">✏️</button>
           <button class="btn-icon" onclick="deleteFood('${f.id}')" title="删除">🗑️</button>
         </div>`).join('')}
@@ -4655,6 +4763,8 @@ function addFood() {
     : ((sel || {}).value || '').trim();
   const nameEl = document.getElementById('foodName');
   const kcalEl = document.getElementById('foodKcal');
+  const unitEl = document.getElementById('foodUnit');
+  const unit = (unitEl && unitEl.value === FOOD_UNIT_GRAM) ? FOOD_UNIT_GRAM : FOOD_UNIT_SERVING;
   const name = ((nameEl && nameEl.value) || '').trim();
   const kcalRaw = ((kcalEl && kcalEl.value) || '').replace(/[^0-9.]/g, '');
   const kcal = parseFloat(kcalRaw);
@@ -4664,7 +4774,7 @@ function addFood() {
   if (!name) { showToast('请填写食物名称'); if (nameEl) nameEl.focus(); return false; }
   if (!kcalRaw || isNaN(kcal) || kcal < 0) { showToast('请填写正确的热量数值'); if (kcalEl) kcalEl.focus(); return false; }
 
-  const food = { id: genId('food'), kind: kind, brand: brand, name: name, kcal: Math.round(kcal) };
+  const food = { id: genId('food'), kind: kind, brand: brand, name: name, kcal: Math.round(kcal), unit: unit };
   getFoods().push(food);
   commit();
   showToast('已添加');
@@ -4696,13 +4806,20 @@ function openFoodAddModal(prefill) {
      <input class="modal-input" id="foodBrandNew" type="text" maxlength="20" placeholder="输入新品牌名称" style="display:none">
      <label>食物名称</label>
      <input class="modal-input" id="foodName" type="text" maxlength="30" placeholder="如：巨无霸" value="${escAttr(p.name || '')}">
-     <label>热量（千卡）</label>
-     <input class="modal-input" id="foodKcal" type="text" inputmode="numeric" placeholder="如：550">`,
+     <label>计价单位</label>
+     <select class="modal-input" id="foodUnit" onchange="onFoodUnitChange('add')">
+       <option value="serving">按份（1 份 = 下面填的热量）</option>
+       <option value="gram"${p.unit === 'gram' ? ' selected' : ''}>按克（下面填每 100 克的热量）</option>
+     </select>
+     <label id="foodKcalLabel">热量（千卡/份）</label>
+     <input class="modal-input" id="foodKcal" type="text" inputmode="numeric" placeholder="如：550">
+     <div class="quant-input-tip" id="foodUnitTip" style="display:${p.unit === 'gram' ? 'block' : 'none'}">记录时按克填写克数，热量按每 100 克折算</div>`,
     { type: 'addFood', fromDiet: fromDiet, meal: p.meal || '' }, '添加');
 
   // 从记账弹窗过来时要保留「取消 / 添加」两个按钮，别沿用只留一个完成按钮的记账样式
   const modalEl = document.getElementById('editModal');
   if (modalEl) modalEl.classList.remove('diet-modal');
+  onFoodUnitChange('add');   // 让 label / placeholder 跟当前单位一致（含预填 gram 的情况）
 
   const sel = document.getElementById('foodBrandSelect');
   const box = document.getElementById('foodBrandNew');
@@ -4723,6 +4840,20 @@ function openFoodAddModal(prefill) {
       : document.getElementById('foodName');
     if (target) target.focus();
   }, 80);
+}
+
+// 切换计价单位时，热量输入框的标签 / 占位符跟着变 ——
+// 不写清楚「每份」还是「每 100 克」，用户没法判断该填 550 还是 116
+function onFoodUnitChange(prefix) {
+  const isEdit = prefix === 'edit';
+  const sel = document.getElementById(isEdit ? 'modalFoodUnit' : 'foodUnit');
+  const label = document.getElementById(isEdit ? 'modalFoodKcalLabel' : 'foodKcalLabel');
+  const input = document.getElementById(isEdit ? 'modalFoodKcal' : 'foodKcal');
+  const tip = document.getElementById(isEdit ? 'modalFoodUnitTip' : 'foodUnitTip');
+  const gram = !!(sel && sel.value === FOOD_UNIT_GRAM);
+  if (label) label.textContent = foodKcalLabel({ unit: gram ? FOOD_UNIT_GRAM : FOOD_UNIT_SERVING });
+  if (input) input.placeholder = gram ? '如：116' : '如：550';
+  if (tip) tip.style.display = gram ? 'block' : 'none';
 }
 
 // 记账 picker 里的三个新增入口都走这里：mode = 'food'（普通新增）| 'brand'（新建品牌）
@@ -4774,9 +4905,16 @@ function editFood(id) {
      <datalist id="modalFoodBrandList">${brands.map(b => `<option value="${escAttr(b)}"></option>`).join('')}</datalist>
      <label>食物名称</label>
      <input class="modal-input" id="modalFoodName" maxlength="30" value="${escAttr(f.name)}">
-     <label>热量（千卡）</label>
-     <input class="modal-input" id="modalFoodKcal" type="text" inputmode="numeric" value="${f.kcal}">`,
+     <label>计价单位</label>
+     <select class="modal-input" id="modalFoodUnit" onchange="onFoodUnitChange('edit')">
+       <option value="serving"${isGramUnit(f) ? '' : ' selected'}>按份（1 份 = 下面填的热量）</option>
+       <option value="gram"${isGramUnit(f) ? ' selected' : ''}>按克（下面填每 100 克的热量）</option>
+     </select>
+     <label id="modalFoodKcalLabel">${foodKcalLabel(f)}</label>
+     <input class="modal-input" id="modalFoodKcal" type="text" inputmode="numeric" value="${f.kcal}">
+     <div class="quant-input-tip" id="modalFoodUnitTip" style="display:${isGramUnit(f) ? 'block' : 'none'}">改了计价单位，<b>已经记录的历史不会重新计算</b>，只影响之后的记录</div>`,
     { type: 'editFood', id: id }, '保存');
+  onFoodUnitChange('edit');
 }
 
 // ===== 饮食记录：三餐分餐 + 分餐上限 + 全天总目标 =====
@@ -4858,9 +4996,63 @@ function dietEntriesOf(entries, mealKey) {
   return (entries || []).filter(e => normMeal(e.meal) === mealKey);
 }
 
-// 单条热量 = 食物热量 × 份数；存了快照，食物库里删掉也还能看到历史
+// ===== 食物计价单位 =====
+// 'serving' 按份：kcal 是「每份」热量，一条记录 qty=2 表示 2 份
+// 'gram'    按克：kcal 是「每 100 克」热量，一条记录 qty=150 表示 150 克
+// 缺省一律按份 —— 老数据没有这个字段，含义本来就是份。
+const FOOD_UNIT_SERVING = 'serving';
+const FOOD_UNIT_GRAM = 'gram';
+
+function foodUnit(x) {
+  return (x && x.unit === FOOD_UNIT_GRAM) ? FOOD_UNIT_GRAM : FOOD_UNIT_SERVING;
+}
+
+function isGramUnit(x) { return foodUnit(x) === FOOD_UNIT_GRAM; }
+
+// 「现在这个数字代表多少」：份 / 克
+function foodQtyUnitName(x) { return isGramUnit(x) ? '克' : '份'; }
+
+// 食物库里展示的热量基准：35 千卡/份 · 116 千卡/100克
+function foodKcalBasis(x) { return isGramUnit(x) ? '千卡/100克' : '千卡/份'; }
+
+// 表单里热量输入框的标签
+function foodKcalLabel(x) { return isGramUnit(x) ? '每 100 克热量（千卡）' : '热量（千卡/份）'; }
+
+// 克重：整数，1~5000。空 / 0 / 负数 / 非数字一律 null，由调用方提示并复原。
+// 用户明确不要小数，所以 150.6 会被四舍五入成 151，而不是悄悄截断成 150。
+function parseFoodGram(raw) {
+  const s = String(raw == null ? '' : raw).replace(/[^0-9.]/g, '');
+  if (!s) return null;
+  const n = Math.round(parseFloat(s));
+  if (!isFinite(n) || n <= 0 || n > 5000) return null;
+  return n;
+}
+
+// 明细行 / 汇总里的数量文本：'2 份' · '150 克' · '2 份 + 150 克'
+// 两类都是 0 时给 '0 份'，避免出现空字符串
+function dietQtyText(entries) {
+  let serving = 0, gram = 0;
+  (entries || []).forEach(e => {
+    const n = Number(e.qty) || 0;
+    if (isGramUnit(e)) gram += n; else serving += n;
+  });
+  serving = Math.round(serving * 100) / 100;
+  gram = Math.round(gram * 100) / 100;
+  const parts = [];
+  if (serving > 0) parts.push(`${serving} 份`);
+  if (gram > 0) parts.push(`${gram} 克`);
+  return parts.length ? parts.join(' + ') : '0 份';
+}
+
+// 单条热量。存了快照，食物库里删掉也还能看到历史：
+//   按份 → kcal × 份数
+//   按克 → kcal × 克数 / 100（kcal 是每 100 克）
+// 只在最后取一次整，避免多步舍入把 1 千卡放大成 2 千卡
 function dietEntryKcal(e) {
-  return Math.round((Number(e.kcal) || 0) * (Number(e.qty) || 0));
+  const kcal = Number(e && e.kcal) || 0;
+  const qty = Number(e && e.qty) || 0;
+  if (isGramUnit(e)) return Math.round(kcal * qty / 100);
+  return Math.round(kcal * qty);
 }
 
 function dietTotalKcal(entries) {
@@ -4883,13 +5075,14 @@ function mealState(dateKey) {
     const sum = dietTotalKcal(list);
     const goal = goals[m.key];
     const hasGoal = goal != null && goal > 0;
-    const qtySum = list.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+    // 份和克不能相加：以前把所有 qty 加起来叫「份」，混了克之后这句话就不成立了
+    const qtyText = dietQtyText(list);
     return {
       key: m.key,
       name: m.name,
       entries: list,
       sum: sum,
-      qtySum: qtySum,
+      qtyText: qtyText,
       goal: hasGoal ? goal : null,
       hasGoal: hasGoal,
       over: hasGoal && sum > goal,        // 热量是上限：超过才算超标
@@ -4967,6 +5160,8 @@ function setDietMealNote(dateKey, mealKey, note) {
 function openDietMealModal(mealKey, keepFilter) {
   ui.diet.meal = normMeal(mealKey);
   ui.diet.view = 'detail';
+  ui.diet.gramFor = '';
+  ui.diet.gramVal = '';
   if (!keepFilter) { ui.diet.kw = ''; ui.diet.kind = 'all'; ui.diet.brand = ''; }
   openEditModal('', '', '<div id="dietModalInner"></div>', { type: 'dietMeal' }, '完成');
   const modal = document.getElementById('editModal');
@@ -4976,6 +5171,9 @@ function openDietMealModal(mealKey, keepFilter) {
 
 function switchDietModalView(view) {
   ui.diet.view = view === 'picker' ? 'picker' : 'detail';
+  // 换视图就收起「填克重」展开区，否则回到 picker 时它莫名其妙还开着
+  ui.diet.gramFor = '';
+  ui.diet.gramVal = '';
   renderDietModal();
 }
 
@@ -4990,7 +5188,7 @@ function renderDietModal() {
 
   if (ui.diet.view === 'picker') {
     if (titleEl) titleEl.textContent = '添加食物';
-    if (subEl) subEl.textContent = `${s.name} · ${dayText} · 点一下加一份`;
+    if (subEl) subEl.textContent = `${s.name} · ${dayText} · 按份的点一下即加，按克的填克重`;
     inner.innerHTML = `<input class="diet-picker-search" id="dietPickerSearch" type="text"
         placeholder="搜索品牌或食物" oninput="onDietPickerSearch(this.value)">
       <div class="diet-picker-filters" id="dietPickerFilters"></div>
@@ -5004,7 +5202,7 @@ function renderDietModal() {
   }
 
   if (titleEl) titleEl.textContent = s.name;
-  if (subEl) subEl.textContent = `${dayText} · ${s.entries.length} 项 · 共 ${s.qtySum} 份`;
+  if (subEl) subEl.textContent = `${dayText} · ${s.entries.length} 项 · 共 ${s.qtyText}`;
 
   const pct = s.hasGoal ? Math.min(100, Math.round(s.sum / s.goal * 100)) : 0;
   const rest = s.hasGoal ? s.goal - s.sum : 0;
@@ -5030,16 +5228,50 @@ function renderDietModal() {
 
 function dietRowHtml(e) {
   const brand = e.brand ? `<span class="diet-row-brand">${escapeHtml(e.brand)}</span>` : '';
-  return `<div class="diet-row">
-      <div class="diet-row-main"><span class="diet-row-name">${escapeHtml(e.name)}${brand}</span></div>
-      <div class="diet-qty">
+  // 按份：− 份数 ＋；按克：一个可点的克数胶囊，点了就地变输入框
+  const qtyHtml = isGramUnit(e)
+    ? `<span class="diet-gram-chip" id="dietGram_${e.id}" onclick="editDietGram('${e.id}')" title="点击修改克数">${e.qty} 克</span>`
+    : `<div class="diet-qty">
         <button class="diet-qty-btn" onclick="changeDietQty('${e.id}', -1)" aria-label="减一份">−</button>
         <span class="diet-qty-val">${e.qty}</span>
         <button class="diet-qty-btn" onclick="changeDietQty('${e.id}', 1)" aria-label="加一份">＋</button>
-      </div>
+      </div>`;
+  return `<div class="diet-row">
+      <div class="diet-row-main"><span class="diet-row-name">${escapeHtml(e.name)}${brand}</span></div>
+      ${qtyHtml}
       <span class="diet-row-kcal">${dietEntryKcal(e)} 千卡</span>
       <button class="diet-del" onclick="removeDietEntry('${e.id}')" aria-label="删除">✕</button>
     </div>`;
+}
+
+// 克数胶囊 → 输入框。原地替换 DOM，不重绘整行：
+// 重绘会丢焦点，而且在 oninput 里重绘等于每敲一个字就断一次光标
+function editDietGram(entryId) {
+  const chip = document.getElementById('dietGram_' + entryId);
+  if (!chip) return;
+  const e = getDietEntries(formatDate(ui.date)).find(x => x.id === entryId);
+  if (!e) return;
+  const input = document.createElement('input');
+  input.id = 'dietGram_' + entryId + '_input';
+  input.className = 'diet-gram-edit';
+  input.type = 'text';
+  input.inputMode = 'numeric';
+  input.value = e.qty;
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    if (save && setDietGram(entryId, input.value)) return;   // 成功时 commit 会重绘
+    renderDietModal();                                       // 取消 / 失败：复原胶囊
+  };
+  input.onblur = () => finish(true);
+  input.onkeydown = (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+  };
+  chip.replaceWith(input);
+  input.focus();
+  if (input.select) input.select();
 }
 
 function onDietPickerSearch(v) {
@@ -5113,15 +5345,118 @@ function renderDietPickerList() {
     renderDietPickerSum();
     return;
   }
-  const added = dietEntriesOf(getDietEntries(formatDate(ui.date)), ui.diet.meal).map(e => e.foodId);
-  el.innerHTML = foods.map(f => `<div class="diet-picker-row" onclick="addDietByFood('${f.id}')">
-      <span class="diet-picker-name"><span class="brand">${escapeHtml(f.brand || '')}</span>${escapeHtml(f.name)}</span>
-      <span class="diet-picker-kcal">${f.kcal} 千卡</span>
-      ${added.indexOf(f.id) >= 0
-        ? '<span class="diet-picker-added">已加</span>'
-        : '<span class="diet-picker-add">＋</span>'}
-    </div>`).join('');
+  const dayEntries = dietEntriesOf(getDietEntries(formatDate(ui.date)), ui.diet.meal);
+  el.innerHTML = foods.map(f => dietPickerRowHtml(f, dayEntries)).join('');
   renderDietPickerSum();
+}
+
+// 一行食物 +（按克时）就地展开的克重输入区
+function dietPickerRowHtml(f, dayEntries) {
+  const gram = isGramUnit(f);
+  const mine = dayEntries.filter(e => e.foodId === f.id && isGramUnit(e) === gram);
+  const addedQty = mine.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+  const expanded = gram && ui.diet.gramFor === f.id;
+
+  let right;
+  if (gram) {
+    // 克数只有填了才知道，所以整行点击 = 展开输入区（已加过的再点 = 继续加）
+    right = addedQty > 0
+      ? `<span class="diet-picker-added gram" title="点这一行可以继续加">已加 ${addedQty} 克</span>`
+      : `<span class="diet-picker-add gram">＋ 填克重</span>`;
+  } else {
+    right = addedQty > 0
+      ? `<span class="diet-picker-added">已加</span>`
+      : `<span class="diet-picker-add">＋</span>`;
+  }
+
+  const onclick = gram ? `openDietPickerGram('${f.id}')` : `addDietByFood('${f.id}')`;
+  return `<div class="diet-picker-item${expanded ? ' expanded' : ''}">
+    <div class="diet-picker-row" onclick="${onclick}">
+      <span class="diet-picker-name"><span class="brand">${escapeHtml(f.brand || '')}</span>${escapeHtml(f.name)}</span>
+      <span class="diet-picker-kcal">${f.kcal} ${foodKcalBasis(f)}</span>
+      ${right}
+    </div>
+    ${expanded ? dietGramBoxHtml(f, addedQty) : ''}
+  </div>`;
+}
+
+// 克重输入区：常用量 + 输入框 + 实时估算。不叠二级弹窗，返回路径只有一条。
+function dietGramBoxHtml(f, addedQty) {
+  const quick = [50, 100, 150, 200];
+  return `<div class="diet-gram-box">
+    <div class="diet-gram-quick">
+      ${quick.map(n => `<button class="diet-gram-quick-btn" onclick="pickerGramQuick(${n})">${n}</button>`).join('')}
+    </div>
+    <div class="diet-gram-input-row">
+      <input class="diet-gram-input" id="dietGramInput" type="text" inputmode="numeric" maxlength="4"
+        placeholder="克重" value="${escAttr(ui.diet.gramVal)}"
+        oninput="onPickerGramInput(this.value)"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();confirmPickerGram('${f.id}')}">
+      <span class="diet-gram-unit">克</span>
+      <button class="diet-gram-ok" onclick="confirmPickerGram('${f.id}')">加入</button>
+    </div>
+    <div class="diet-gram-tip" id="dietGramTip">${pickerGramTip(f, addedQty, ui.diet.gramVal)}</div>
+  </div>`;
+}
+
+function pickerGramTip(f, addedQty, raw) {
+  const per100 = Number(f && f.kcal) || 0;
+  const parts = [`每 100 克 ${per100} 千卡`];
+  const n = parseFoodGram(raw);
+  if (n != null) {
+    parts.push(`${n} 克 ≈ ${Math.round(per100 * n / 100)} 千卡`);
+    if (addedQty > 0) parts.push(`今日已记 ${addedQty} 克，加入后 ${addedQty + n} 克`);
+  } else if (addedQty > 0) {
+    parts.push(`今日已记 ${addedQty} 克`);
+  }
+  return parts.join(' · ');
+}
+
+// 展开 / 收起某个食物的克重输入区
+function openDietPickerGram(foodId) {
+  if (ui.diet.gramFor === foodId) {
+    ui.diet.gramFor = '';
+    ui.diet.gramVal = '';
+    renderDietPickerList();
+    return;
+  }
+  ui.diet.gramFor = foodId;
+  ui.diet.gramVal = '';
+  renderDietPickerList();
+  const input = document.getElementById('dietGramInput');
+  if (input && input.focus) input.focus();
+}
+
+// 输入克数时不重绘整个列表：一重绘就丢焦点，等于每敲一位就断一次光标
+function onPickerGramInput(v) {
+  ui.diet.gramVal = String(v == null ? '' : v).replace(/[^0-9]/g, '').slice(0, 4);
+  const input = document.getElementById('dietGramInput');
+  if (input && input.value !== ui.diet.gramVal) input.value = ui.diet.gramVal;
+  refreshPickerGramTip();
+}
+
+function refreshPickerGramTip() {
+  const tip = document.getElementById('dietGramTip');
+  if (!tip) return;
+  const f = getFoods().find(x => x.id === ui.diet.gramFor);
+  if (!f) return;
+  const addedQty = dietEntriesOf(getDietEntries(formatDate(ui.date)), ui.diet.meal)
+    .filter(e => e.foodId === f.id && isGramUnit(e))
+    .reduce((s, e) => s + (Number(e.qty) || 0), 0);
+  tip.textContent = pickerGramTip(f, addedQty, ui.diet.gramVal);
+}
+
+function pickerGramQuick(n) {
+  ui.diet.gramVal = String(n);
+  const input = document.getElementById('dietGramInput');
+  if (input) input.value = ui.diet.gramVal;
+  refreshPickerGramTip();
+}
+
+function confirmPickerGram(foodId) {
+  const input = document.getElementById('dietGramInput');
+  const raw = input ? input.value : ui.diet.gramVal;
+  addDietByGram(foodId, raw);   // 成功时 commit 会重绘 picker（展开区随之收起）
 }
 
 function renderDietPickerSum() {
@@ -5129,16 +5464,20 @@ function renderDietPickerSum() {
   if (!el) return;
   const s = mealState(formatDate(ui.date)).find(x => x.key === ui.diet.meal);
   if (!s) return;
-  el.innerHTML = `<span>${s.name} ${s.entries.length} 项 · ${s.qtySum} 份</span><span>该餐 <b>${s.sum}</b> 千卡</span>`;
+  el.innerHTML = `<span>${s.name} ${s.entries.length} 项 · ${s.qtyText}</span><span>该餐 <b>${s.sum}</b> 千卡</span>`;
 }
 
-// 同一餐里再点一次同一食物 = 份数 +1；不同餐各自独立
+// 按份的食物：同一餐里再点一次 = 份数 +1；不同餐各自独立
+// 按克的食物不能一点就加（得先知道多少克），走 addDietByGram
 function addDietByFood(foodId) {
   const food = getFoods().find(f => f.id === foodId);
   if (!food) return;
+  if (isGramUnit(food)) { openDietPickerGram(foodId); return; }
   const meal = ui.diet.meal;
   const entries = getDietEntries(formatDate(ui.date));
-  const exist = entries.find(e => normMeal(e.meal) === meal && e.foodId === foodId);
+  // 找已有那条要带上单位：同一种食物可能一条按份、一条按克（改过单位的历史），
+  // 不区分的话点「＋」会加到克那条上
+  const exist = entries.find(e => normMeal(e.meal) === meal && e.foodId === foodId && !isGramUnit(e));
   if (exist) {
     exist.qty = Math.min((Number(exist.qty) || 0) + 1, 99);
   } else {
@@ -5149,7 +5488,8 @@ function addDietByFood(foodId) {
       name: food.name,
       brand: food.brand,
       kcal: Number(food.kcal) || 0,
-      qty: 1
+      qty: 1,
+      unit: FOOD_UNIT_SERVING
     });
   }
   commit();
@@ -5159,10 +5499,54 @@ function addDietByFood(foodId) {
     : `已添加 ${food.name} · ${s ? s.sum : 0} 千卡`);
 }
 
+// 按克加一条：同食物同餐已有记录就累加克数（150 + 100 = 250）
+function addDietByGram(foodId, gram) {
+  const food = getFoods().find(f => f.id === foodId);
+  if (!food) return false;
+  const n = parseFoodGram(gram);
+  if (n == null) { showToast('克重请填 1~5000 之间的整数'); return false; }
+  const meal = ui.diet.meal;
+  const entries = getDietEntries(formatDate(ui.date));
+  const exist = entries.find(e => normMeal(e.meal) === meal && e.foodId === foodId && isGramUnit(e));
+  if (exist) {
+    exist.qty = Math.min((Number(exist.qty) || 0) + n, 5000);
+  } else {
+    entries.push({
+      id: genId('diet'),
+      meal: meal,
+      foodId: food.id,
+      name: food.name,
+      brand: food.brand,
+      kcal: Number(food.kcal) || 0,
+      qty: n,
+      unit: FOOD_UNIT_GRAM
+    });
+  }
+  ui.diet.gramFor = '';
+  ui.diet.gramVal = '';
+  commit();
+  const s = mealState(formatDate(ui.date)).find(x => x.key === meal);
+  showToast(`已添加 ${food.name} ${n} 克 · ${s ? s.sum : 0} 千卡`);
+  return true;
+}
+
+// 明细行里直接改某条的克数（点胶囊 → 输入框 → 失焦保存）
+// 返回 false 时不动原值，由调用方负责把输入框换回胶囊
+function setDietGram(entryId, raw) {
+  const entries = getDietEntries(formatDate(ui.date));
+  const e = entries.find(x => x.id === entryId);
+  if (!e || !isGramUnit(e)) return false;
+  const n = parseFoodGram(raw);
+  if (n == null) { showToast('克重请填 1~5000 之间的整数'); return false; }
+  e.qty = Math.min(n, 5000);
+  commit();
+  return true;
+}
+
 function changeDietQty(entryId, delta) {
   const entries = getDietEntries(formatDate(ui.date));
   const e = entries.find(x => x.id === entryId);
-  if (!e) return;
+  if (!e || isGramUnit(e)) return;   // 克行没有 − ＋，改克数走 setDietGram
   const next = (Number(e.qty) || 0) + delta;
   if (next <= 0) { removeDietEntry(entryId); return; }
   e.qty = Math.min(next, 99);
@@ -5191,14 +5575,18 @@ function renderDietModalLive() {
 }
 
 // 食物被编辑后，已记录的历史快照跟着更新（改名 / 改热量都不会让旧记录失真）
+// 例外：单位变了就只刷名称和品牌，不动热量 ——
+// 「35 千卡/份 × 2 份 = 70」改成按克后会变成「116 千卡/100克 × 2 = 2」，
+// 三个月前的历史记录会凭空失真，这是不能接受的
 function syncDietFoodSnapshots(food) {
   const all = getDiets();
+  const nextUnit = foodUnit(food);
   Object.keys(all).forEach(k => {
     (all[k] || []).forEach(e => {
       if (e.foodId !== food.id) return;
       e.name = food.name;
       e.brand = food.brand;
-      e.kcal = Number(food.kcal) || 0;
+      if (foodUnit(e) === nextUnit) e.kcal = Number(food.kcal) || 0;
     });
   });
 }
