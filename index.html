@@ -1373,9 +1373,9 @@ body {
 /* 记账弹窗 */
 .diet-modal-list { max-height: 40vh; overflow-y: auto; }
 .diet-modal-list .diet-row:first-child { border-top: none; }
+.diet-modal-add-row { display: flex; gap: 8px; margin-top: 12px; }
 .diet-modal-add {
-  width: 100%;
-  margin-top: 12px;
+  flex: 1;
   padding: 10px;
   border: 1px dashed var(--primary);
   border-radius: var(--radius-sm);
@@ -1386,6 +1386,12 @@ body {
   cursor: pointer;
 }
 .diet-modal-add:active { background: var(--primary-light); }
+/* 自定义记录：与食物库按钮同款虚线框，但用中性色区分「不入库」的语义 */
+.diet-modal-add.custom {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+.diet-modal-add.custom:active { background: rgba(0, 0, 0, 0.04); }
 .diet-modal-sum {
   margin-top: 14px;
   padding-top: 14px;
@@ -4151,6 +4157,17 @@ function confirmEditModal() {
   } else if (s.type === 'dietMeal') {
     closeEditModal();
     return;
+  } else if (s.type === 'addDietCustom') {
+    const name = ((document.getElementById('dietCustomName') || {}).value || '').trim();
+    if (!name) { showToast('请输入名称'); return; }
+    const raw = ((document.getElementById('dietCustomKcal') || {}).value || '').trim().replace(/[^0-9.]/g, '');
+    const n = parseFloat(raw);
+    if (raw === '' || isNaN(n) || n <= 0) { showToast('热量请填大于 0 的数字'); return; }
+    if (n > 10000) { showToast('热量请填 10000 以内的数字'); return; }
+    addDietCustom(name, n, s.meal);
+    closeEditModal();
+    openDietMealModal(s.meal, true);   // 回到本餐明细页，能立刻看到刚加的一条
+    return;
   } else if (s.type === 'addFood') {
     const food = addFood();
     if (!food) return;        // 校验失败时保持弹窗打开
@@ -5213,9 +5230,12 @@ function renderDietModal() {
   inner.innerHTML = `<div class="diet-modal-list">
       ${s.entries.length
         ? s.entries.map(dietRowHtml).join('')
-        : '<div class="diet-empty">这一餐还没记录，点下面从食物库添加</div>'}
+        : '<div class="diet-empty">这一餐还没记录，点下面添加</div>'}
     </div>
-    <button class="diet-modal-add" onclick="switchDietModalView('picker')">＋ 从食物库添加</button>
+    <div class="diet-modal-add-row">
+      <button class="diet-modal-add" onclick="switchDietModalView('picker')">＋ 从食物库添加</button>
+      <button class="diet-modal-add custom" onclick="openDietCustomModal()">✏️ 自定义记录</button>
+    </div>
     <div class="diet-modal-sum">
       <div class="diet-modal-sum-top">
         <span class="diet-modal-sum-label">本餐合计</span>
@@ -5528,6 +5548,41 @@ function addDietByGram(foodId, gram) {
   const s = mealState(formatDate(ui.date)).find(x => x.key === meal);
   showToast(`已添加 ${food.name} ${n} 克 · ${s ? s.sum : 0} 千卡`);
   return true;
+}
+
+// ===== 自定义记录：不入食物库，直接往当前餐记一条 =====
+// 表单弹窗（与记账弹窗是两层），添加后回到本餐明细页
+function openDietCustomModal() {
+  const meal = ui.diet.meal;
+  const s = mealState(formatDate(ui.date)).find(x => x.key === meal);
+  openEditModal('自定义记录', `${s ? s.name : ''} · 只记到本餐，不存入食物库`,
+    `<label>名称</label>
+     <input class="modal-input" id="dietCustomName" type="text" maxlength="30" placeholder="如：一碗面">
+     <label>热量（千卡/份）</label>
+     <input class="modal-input" id="dietCustomKcal" type="text" inputmode="numeric" placeholder="如：400">
+     <div class="quant-input-tip">份数默认 1 份，之后可在明细行用 − ＋ 调整</div>`,
+    { type: 'addDietCustom', meal: meal }, '添加');
+  const modalEl = document.getElementById('editModal');
+  if (modalEl) modalEl.classList.remove('diet-modal');
+}
+
+// 明细行需要 kcal 快照 + unit，与食物库记录同构；custom 标记用于区分来源
+function addDietCustom(name, kcal, meal) {
+  const entries = getDietEntries(formatDate(ui.date));
+  entries.push({
+    id: genId('diet'),
+    meal: meal,
+    custom: true,
+    name: name,
+    kcal: Math.round(kcal),
+    qty: 1,
+    unit: FOOD_UNIT_SERVING
+  });
+  commit();
+  const s = mealState(formatDate(ui.date)).find(x => x.key === meal);
+  showToast(s && s.hasGoal
+    ? `${s.name} ${s.sum} / ${s.goal} 千卡`
+    : `已添加 ${name} · ${s ? s.sum : 0} 千卡`);
 }
 
 // 明细行里直接改某条的克数（点胶囊 → 输入框 → 失焦保存）
