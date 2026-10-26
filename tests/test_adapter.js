@@ -132,7 +132,7 @@ console.log('\n=== 3. 打卡页条目（饮食分类）===');
   ok(es.every(e => e.counted === true), '设了目标的餐全部计入分母');
   ok(es.every(e => e.extraClass === 'diet-meal-item'), '饮食行带样式钩子');
   const bf = es.find(e => e.name === '早餐');
-  ok(bf.badge === '240/500 千卡', '餐次徽章：' + bf.badge);
+  ok(bf.badge === '已吃 240 · 剩 260 千卡', '餐次徽章：' + bf.badge);
   ok(bf.done === true && bf.rowClass.indexOf('done') >= 0, '240 ≤ 500 → 达标');
   ok(bf.onclick === "openDietMealModal('breakfast')", '点行打开记账弹窗');
   const dinner = es.find(e => e.name === '晚餐');
@@ -164,7 +164,7 @@ seed();
   ok(PC().indexOf('2 / 5') >= 0, '今日完成 2/5 = 2 个普通项 + 3 个目标餐，达成 2 项');
   ok(ck.indexOf('diet-meal-item') > 0, '饮食行走同一套 .checkin-item 结构');
   ok(S.catTitleTag(G('state.categories[0]'), TK) === '', '普通分类名旁没有附加标签');
-  ok(S.catTitleTag(G('state.categories[1]'), TK).indexOf('1340/2000 千卡') >= 0,
+  ok(S.catTitleTag(G('state.categories[1]'), TK).indexOf('已吃 1340 · 剩 660 千卡') >= 0,
     '饮食分类名旁是全天热量：' + S.catTitleTag(G('state.categories[1]'), TK));
 }
 
