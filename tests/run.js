@@ -13,6 +13,7 @@ const SUITES = [
   ['test_diet_align.js', '饮食分类与普通分类行为对齐'],
   ['test_diet_picker.js','记账 picker：品类/品牌筛选、筛空可新增、新增后回填'],
   ['test_diet_custom.js','自定义记录：不入库直接记一条、校验、合计与份数'],
+  ['test_diet_skip.js',  '不吃这餐：0 千卡算完成、有明细不许标、趋势画 0 点、剩余不为负'],
   ['test_food_unit.js',  '食物单位：按份/按克、克重输入、汇总口径、改单位不重算历史'],
   ['test_adapter.js',    '追踪条目适配器：形状统一、注册表完整、渲染层无形态分支'],
   ['test_security.js',   '安全：文本/属性两个转义出口、id 白名单、CSV 公式注入'],

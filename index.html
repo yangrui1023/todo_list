@@ -1366,6 +1366,28 @@ body {
 .checkin-item.diet-meal-item.checked .checkin-item-name { color: var(--text); text-decoration: none; }
 .checkin-item.diet-meal-item .quant-badge { font-variant-numeric: tabular-nums; }
 
+/* 「不吃这餐」快捷开关：小胶囊，未启用时是描边，启用后填充为中性灰。
+   它排在 badge 与 🔥 之间，视觉层级低于热量数字，点了不会误触进弹窗 */
+.diet-skip-btn {
+  flex: none;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.diet-skip-btn.on {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+/* 标记不吃的那一行：名字与热量都压淡，避免和「真吃了」的行看起来一样 */
+.checkin-item.diet-skipped .quant-badge { background: var(--bg); color: var(--text-muted); }
+
 /* 记账弹窗：增删改都是即时生效，不存在「取消」，只保留一个「完成」 */
 #editModal.diet-modal .modal-actions .btn-outline { display: none; }
 #editModal.diet-modal .modal-actions .btn-primary { flex: 1; }
@@ -1392,6 +1414,45 @@ body {
   color: var(--text-muted);
 }
 .diet-modal-add.custom:active { background: rgba(0, 0, 0, 0.04); }
+
+/* 「这餐不吃」：整宽次级按钮，比两个添加入口降一级 */
+.diet-modal-skip {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.diet-modal-skip:active { background: var(--bg); }
+
+/* 已标不吃的横幅：替代添加入口的位置 */
+.diet-skip-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 13px;
+}
+.diet-skip-cancel {
+  flex: none;
+  padding: 5px 10px;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  cursor: pointer;
+}
 .diet-modal-sum {
   margin-top: 14px;
   padding-top: 14px;
@@ -2125,6 +2186,7 @@ function normalizeState(s) {
   if (!s.dietGoals || typeof s.dietGoals !== 'object') s.dietGoals = {};
   s.dietGoals = Object.assign({}, DIET_GOAL_DEFAULT, s.dietGoals);
   if (!s.dietMealNotes || typeof s.dietMealNotes !== 'object') s.dietMealNotes = {};
+  if (!s.dietSkipped || typeof s.dietSkipped !== 'object' || Array.isArray(s.dietSkipped)) s.dietSkipped = {};
   if (typeof s.dietRemoved !== 'boolean') s.dietRemoved = false;
   if (!Number.isFinite(s._rev) || s._rev < 0) s._rev = 0;
   return s;
@@ -2213,6 +2275,14 @@ function sanitizeState(s) {
     const m = s.dietMealNotes[key];
     if (!DATE_RE.test(key) || !m || typeof m !== 'object') { delete s.dietMealNotes[key]; return; }
     Object.keys(m).forEach(k => { m[k] = clipStr(m[k], 200); });
+  });
+
+  // 不吃标记：只留合法日期 + 合法餐次的 true，其余一律清掉（false / 字符串都算无效）
+  Object.keys(s.dietSkipped).forEach(key => {
+    const m = s.dietSkipped[key];
+    if (!DATE_RE.test(key) || !m || typeof m !== 'object' || Array.isArray(m)) { delete s.dietSkipped[key]; return; }
+    DIET_MEAL_KEYS.forEach(k => { if (m[k] !== true) delete m[k]; });
+    if (Object.keys(m).length === 0) delete s.dietSkipped[key];
   });
 
   s.foods = s.foods.filter(f => f && typeof f === 'object').map(f => {
@@ -2993,20 +3063,28 @@ function itemEntries(cat, dateKey) {
 function mealEntries(cat, dateKey) {
   return visibleDietMeals(dateKey).map(s => {
     const recorded = s.entries.length > 0;
+    const skipped = s.skipped;
+    // 不吃也是「记过」，所以行要有勾选态；done 走 mealState 的统一判定
+    const rowClass = `${(recorded || skipped) ? 'checked' : ''} ${s.done ? 'done' : (s.over ? 'partial' : '')}${skipped ? ' diet-skipped' : ''}`;
     return {
       id: DIET_TREND_PREFIX + s.key,
       name: s.name,
-      recorded: recorded,
-      done: s.reached,
+      recorded: recorded || skipped,
+      done: s.done,
       counted: s.hasGoal,
-      rowClass: `${recorded ? 'checked' : ''} ${s.reached ? 'done' : (recorded ? 'partial' : '')}`,
+      rowClass: rowClass,
       extraClass: 'diet-meal-item',
-      badge: s.hasGoal ? `${s.sum}/${s.goal} 千卡` : `${s.sum} 千卡`,
-      badgeClass: s.over ? 'low' : (s.reached ? 'ok' : ''),
+      badge: skipped ? '不吃 · 0 千卡' : (s.hasGoal ? `${s.sum}/${s.goal} 千卡` : `${s.sum} 千卡`),
+      badgeClass: s.over ? 'low' : (s.done ? 'ok' : ''),
       note: getDietMealNote(dateKey, s.key),
       noteOnclick: `openDietNoteModal('${s.key}')`,
       streak: getDietMealStreak(s.key),
-      onclick: `openDietMealModal('${s.key}')`
+      onclick: `openDietMealModal('${s.key}')`,
+      // 打卡页行内快捷开关：已标不吃的永远可点（取消），有明细的点了会被拦下来提示
+      skipBtn: s.hasGoal
+        ? `<span class="diet-skip-btn${skipped ? ' on' : ''}" title="${skipped ? '取消不吃标记' : '这餐不吃'}"
+             onclick="event.stopPropagation(); toggleDietSkip('${s.key}', event)">${skipped ? '↩ 取消' : '不吃'}</span>`
+        : ''
     };
   });
 }
@@ -3076,7 +3154,7 @@ function dietStatsEntries(cat) {
     return {
       id: DIET_TREND_PREFIX + key,
       name: m ? m.name : key,
-      recordedOn: dk => dietMealHasEntries(dk, key)
+      recordedOn: dk => dietMealRecorded(dk, key)
     };
   });
 }
@@ -3324,6 +3402,7 @@ function checkinRowHtml(o) {
         ${o.noteText || ''}
         <div class="checkin-right">
           ${badge}
+          ${o.skipBtn || ''}
           ${streak}
           ${o.noteBtn || ''}
         </div>
@@ -3402,6 +3481,7 @@ function renderCheckin() {
         streak: e.streak,
         badge: e.badge,
         badgeClass: e.badgeClass,
+        skipBtn: e.skipBtn,
         onclick: e.onclick
       });
     });
@@ -5000,9 +5080,11 @@ function resolveTrendItem(id) {
   return isDietTrendItemId(id) ? dietTrendItem(String(id).slice(DIET_TREND_PREFIX.length)) : getItemById(id);
 }
 // 某餐某天的摄入合计；那天没记 → null（折线跳过，不补 0）
+// 标了不吃 → 0（真实摄入为 0，折线该落到 0，而不是当作没数据跳过）
 // mealKey 为 'total' 时返回全天合计
 function dietMealSumOf(dateKey, mealKey) {
   const entries = getDietEntries(dateKey);
+  if (mealKey !== 'total' && isDietMealSkipped(dateKey, mealKey)) return 0;
   if (!entries || entries.length === 0) return null;
   if (mealKey === 'total') return dietTotalKcal(entries);
   const list = dietEntriesOf(entries, mealKey);
@@ -5078,12 +5160,20 @@ function dietTotalKcal(entries) {
 
 // 一天三餐的汇总——打卡页、记账弹窗、「今日完成」都走这一个口径
 // 饮食的「餐次状态」是这一族函数唯一的真计算：
-//   mealState(date)          每餐的基本状态：entries / sum / goal / over / reached
-//   visibleDietMeals(date)   打卡页显示哪几餐（有目标 或 有记录，都没有则给一餐入口）
+//   mealState(date)          每餐的基本状态：entries / sum / goal / over / reached / skipped / done
+//   visibleDietMeals(date)   打卡页显示哪几餐（有目标 或 有记录 或 标了不吃，都没有则给一餐入口）
 //   dietGoalMeals()          哪几餐设了目标（等价于「打卡项」列表，与日期无关）
-//   dietMealHasEntries()     只读判断某餐有没有记录（不往 state 里补空数组，供连续天数循环用）
-// 除 dietMealHasEntries 外，其余都是 mealState 的投影，不要再各自重算一遍。
+//   dietMealRecorded()       只读判断某餐那天「算不算有记录」（有明细 或 标了不吃），供连续天数循环用
+// 除 dietMealRecorded 外，其余都是 mealState 的投影，不要再各自重算一遍。
 // 三个页面的渲染走 04c 适配器拿 tracked entry，不直接调这里。
+//
+// 「不吃」是主动达成的状态：0 千卡、算完成、进连续天数与累计次数。
+// 它与「有明细」互斥——有明细的餐不允许标不吃，所以不用考虑两者同时成立的口径冲突。
+function isDietMealSkipped(dateKey, mealKey) {
+  const day = state.dietSkipped && state.dietSkipped[dateKey];
+  return !!(day && day[mealKey] === true);
+}
+
 function mealState(dateKey) {
   const entries = getDietEntries(dateKey);
   const goals = getDietGoals();
@@ -5094,6 +5184,8 @@ function mealState(dateKey) {
     const hasGoal = goal != null && goal > 0;
     // 份和克不能相加：以前把所有 qty 加起来叫「份」，混了克之后这句话就不成立了
     const qtyText = dietQtyText(list);
+    const skipped = isDietMealSkipped(dateKey, m.key) && list.length === 0;
+    const reached = list.length > 0 && hasGoal && sum <= goal;
     return {
       key: m.key,
       name: m.name,
@@ -5103,7 +5195,10 @@ function mealState(dateKey) {
       goal: hasGoal ? goal : null,
       hasGoal: hasGoal,
       over: hasGoal && sum > goal,        // 热量是上限：超过才算超标
-      reached: list.length > 0 && hasGoal && sum <= goal
+      reached: reached,
+      skipped: skipped,
+      // 统一完成判定：正常吃到不超 或 主动不吃。打卡页分母/完成度、统计页都读这一个字段
+      done: reached || skipped
     };
   });
 }
@@ -5117,11 +5212,11 @@ function defaultDietMeal() {
   return DIET_MEAL_KEYS[defaultDietMealIndex()];
 }
 
-// 显示哪几餐：设了目标 或 当天有记录。全都空时按当前时段给一餐入口，
+// 显示哪几餐：设了目标 或 当天有记录 或 标了不吃。全都空时按当前时段给一餐入口，
 // 这样清空所有餐目标的人不会连入口都找不到。
 function visibleDietMeals(dateKey) {
   const all = mealState(dateKey);
-  const shown = all.filter(s => s.hasGoal || s.entries.length > 0);
+  const shown = all.filter(s => s.hasGoal || s.entries.length > 0 || s.skipped);
   return shown.length ? shown : [all[defaultDietMealIndex()]];
 }
 
@@ -5139,21 +5234,56 @@ function dietMealHasEntries(dateKey, mealKey) {
   return entries.some(e => normMeal(e.meal) === mealKey);
 }
 
+// 某餐那天「算不算记过」：有明细 或 标了不吃。连续天数 / 累计次数 / 统计页都读这个。
+// 不叫 HasEntries 是因为「不吃」也算——名字按语义走，免得以后又有人往这塞明细逻辑
+function dietMealRecorded(dateKey, mealKey) {
+  if (mealKey === 'total') return dietMealHasEntries(dateKey, mealKey);
+  return dietMealHasEntries(dateKey, mealKey) || isDietMealSkipped(dateKey, mealKey);
+}
+
+// 标记 / 取消「不吃这餐」。有明细的餐不允许标——0 千卡和 500 千卡同时存在没有意义，
+// 调用方负责先提示用户删掉明细，这里返回 false 表示没改。
+function setDietMealSkipped(dateKey, mealKey, skipped) {
+  if (skipped && dietMealHasEntries(dateKey, mealKey)) return false;
+  if (!state.dietSkipped || typeof state.dietSkipped !== 'object') state.dietSkipped = {};
+  const day = state.dietSkipped[dateKey] || {};
+  if (skipped) day[mealKey] = true; else delete day[mealKey];
+  if (Object.keys(day).length) state.dietSkipped[dateKey] = day;
+  else delete state.dietSkipped[dateKey];
+  commit();
+  return true;
+}
+
+// 打卡页按钮：切换不吃状态
+function toggleDietSkip(mealKey, ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  const dateKey = formatDate(ui.date);
+  const skipped = isDietMealSkipped(dateKey, mealKey);
+  if (!skipped && dietMealHasEntries(dateKey, mealKey)) {
+    showToast('这餐已经有记录，先删掉再标不吃');
+    return;
+  }
+  setDietMealSkipped(dateKey, mealKey, !skipped);
+  showToast(skipped ? '已取消不吃标记' : '已标记不吃');
+}
+
 // 连续有记录天数：与 getStreak 同一套算法（今天没记就从昨天起算）
 function getDietMealStreak(mealKey) {
   let streak = 0;
   const d = new Date();
-  if (!dietMealHasEntries(formatDate(d), mealKey)) d.setDate(d.getDate() - 1);
-  while (dietMealHasEntries(formatDate(d), mealKey)) {
+  if (!dietMealRecorded(formatDate(d), mealKey)) d.setDate(d.getDate() - 1);
+  while (dietMealRecorded(formatDate(d), mealKey)) {
     streak++;
     d.setDate(d.getDate() - 1);
   }
   return streak;
 }
 
-// 累计次数：与 getTotalCount 同口径（有记录的天数）
+// 累计次数：与 getTotalCount 同口径（有记录的天数，含不吃）
 function getDietMealTotalCount(mealKey) {
-  return Object.keys(getDiets()).filter(k => dietMealHasEntries(k, mealKey)).length;
+  const keys = new Set(Object.keys(getDiets()));
+  Object.keys(state.dietSkipped || {}).forEach(k => keys.add(k));
+  return Array.from(keys).filter(k => dietMealRecorded(k, mealKey)).length;
 }
 
 // 每餐备注：与打卡项备注同构，按「日期 + 餐次」存
@@ -5219,23 +5349,37 @@ function renderDietModal() {
   }
 
   if (titleEl) titleEl.textContent = s.name;
-  if (subEl) subEl.textContent = `${dayText} · ${s.entries.length} 项 · 共 ${s.qtyText}`;
+  if (subEl) subEl.textContent = s.skipped
+    ? `${dayText} · 已标记这餐不吃`
+    : `${dayText} · ${s.entries.length} 项 · 共 ${s.qtyText}`;
 
   const pct = s.hasGoal ? Math.min(100, Math.round(s.sum / s.goal * 100)) : 0;
-  const rest = s.hasGoal ? s.goal - s.sum : 0;
+  // 剩余恒 ≥ 0：超目标时剩余显示 0，超出多少单独用「超出 N 千卡」表达，
+  // 不让「剩余 -320」这种反直觉的负数出现在界面上
+  const remain = s.hasGoal ? Math.max(s.goal - s.sum, 0) : 0;
   const restText = !s.hasGoal ? '未设本餐目标'
-    : (rest >= 0 ? `剩余 ${rest} 千卡` : `超出 ${-rest} 千卡`);
-  const restCls = !s.hasGoal ? '' : (rest >= 0 ? 'ok' : 'over');
+    : (s.over ? `超出 ${s.sum - s.goal} 千卡 · 剩余 0 千卡` : `剩余 ${remain} 千卡`);
+  const restCls = !s.hasGoal ? '' : (s.over ? 'over' : 'ok');
+
+  // 不吃状态下不展示添加入口：这一餐已经明确「不吃」，再往里加食物是自相矛盾
+  const addArea = s.skipped
+    ? `<div class="diet-skip-banner">🍽️ 这餐已标记不吃（0 千卡）
+         <button class="diet-skip-cancel" onclick="toggleDietSkip('${s.key}'); renderDietModal();">取消不吃</button>
+       </div>`
+    : `<div class="diet-modal-add-row">
+         <button class="diet-modal-add" onclick="switchDietModalView('picker')">＋ 从食物库添加</button>
+         <button class="diet-modal-add custom" onclick="openDietCustomModal()">✏️ 自定义记录</button>
+       </div>
+       ${s.entries.length === 0 ? `<button class="diet-modal-skip" onclick="toggleDietSkip('${s.key}'); renderDietModal();">🛌 这餐不吃</button>` : ''}`;
 
   inner.innerHTML = `<div class="diet-modal-list">
       ${s.entries.length
         ? s.entries.map(dietRowHtml).join('')
-        : '<div class="diet-empty">这一餐还没记录，点下面添加</div>'}
+        : (s.skipped
+            ? '<div class="diet-empty">这餐记为不吃，0 千卡也算完成打卡</div>'
+            : '<div class="diet-empty">这一餐还没记录，点下面添加</div>')}
     </div>
-    <div class="diet-modal-add-row">
-      <button class="diet-modal-add" onclick="switchDietModalView('picker')">＋ 从食物库添加</button>
-      <button class="diet-modal-add custom" onclick="openDietCustomModal()">✏️ 自定义记录</button>
-    </div>
+    ${addArea}
     <div class="diet-modal-sum">
       <div class="diet-modal-sum-top">
         <span class="diet-modal-sum-label">本餐合计</span>
