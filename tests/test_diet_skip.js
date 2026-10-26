@@ -77,8 +77,31 @@ console.log('=== 3. 打卡页展示 ===');
 S.renderCheckin();
 ok(/diet-skipped/.test(CK()), '行带 diet-skipped 样式');
 ok(/不吃 · 0 千卡/.test(CK()), 'badge 显示「不吃 · 0 千卡」');
-ok(/↩ 取消/.test(CK()), '按钮变为取消态');
-ok(!/已打卡/.test(CK()) || true, '打卡页渲染无异常');
+ok(!/diet-skip-btn/.test(CK()), '打卡页不再有行内快捷按钮（操作统一进弹窗）');
+
+console.log('=== 3b. 弹窗内的不吃入口 ===');
+seed();
+S.openDietMealModal('lunch');
+let dHtml = getEl('dietModalInner').innerHTML;
+ok(/diet-modal-skip/.test(dHtml), '空餐弹窗底部有「这餐不吃」');
+ok(/markDietSkip\('lunch'\)/.test(dHtml), '按钮绑定到 markDietSkip');
+S.markDietSkip('lunch');
+dHtml = getEl('dietModalInner').innerHTML;
+ok(S.isDietMealSkipped(TODAY(), 'lunch'), '弹窗内点不出后状态写入');
+S.openDietMealModal('lunch');
+dHtml = getEl('dietModalInner').innerHTML;
+ok(/diet-skip-banner/.test(dHtml), '已不吃的餐显示横条');
+ok(/cancelDietSkip\('lunch'\)/.test(dHtml), '横条带「改为吃」');
+ok(!/diet-modal-add/.test(dHtml), '不吃状态下隐藏添加入口');
+S.cancelDietSkip('lunch');
+ok(!S.isDietMealSkipped(TODAY(), 'lunch'), '「改为吃」清掉标记');
+ok(/diet-modal-skip/.test(getEl('dietModalInner').innerHTML), '改回后重新出现「这餐不吃」');
+
+console.log('=== 3c. 有明细时弹窗不显示不吃入口 ===');
+seed();
+S.getDietEntries(TODAY()).push({ id: 'd9', meal: 'lunch', foodId: 'f1', name: '苹果', kcal: 52, qty: 1, unit: 'serving' });
+S.openDietMealModal('lunch');
+ok(!/diet-modal-skip/.test(getEl('dietModalInner').innerHTML), '已有明细 → 不显示「这餐不吃」');
 
 console.log('=== 4. 完成度统计（饮食分类默认不计入今日完成，需显式打开）===');
 S.getDietCat().countInStats = true;
