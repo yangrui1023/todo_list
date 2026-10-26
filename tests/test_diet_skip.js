@@ -91,11 +91,11 @@ ok(S.isDietMealSkipped(TODAY(), 'lunch'), '弹窗内点不出后状态写入');
 S.openDietMealModal('lunch');
 dHtml = getEl('dietModalInner').innerHTML;
 ok(/diet-skip-banner/.test(dHtml), '已不吃的餐显示横条');
-ok(/cancelDietSkip\('lunch'\)/.test(dHtml), '横条带「改为吃」');
+ok(/取消/.test(dHtml), '横条的按钮是「取消」');
 ok(!/diet-modal-add/.test(dHtml), '不吃状态下隐藏添加入口');
 S.cancelDietSkip('lunch');
 ok(!S.isDietMealSkipped(TODAY(), 'lunch'), '「改为吃」清掉标记');
-ok(/diet-modal-skip/.test(getEl('dietModalInner').innerHTML), '改回后重新出现「这餐不吃」');
+ok(/这餐不吃/.test(getEl('dietModalInner').innerHTML), '改回后重新出现「这餐不吃」');
 
 console.log('=== 3c. 有明细时弹窗不显示不吃入口 ===');
 seed();

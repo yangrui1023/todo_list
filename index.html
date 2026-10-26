@@ -1412,7 +1412,7 @@ body {
 }
 .diet-modal-skip:active { color: var(--text); }
 
-/* 已标不吃的横条：整块替换添加入口，右侧「改为吃」是唯一出口 */
+/* 已标不吃的横条：整块替换添加入口，右侧「取消」是唯一出口 */
 .diet-skip-banner {
   display: flex;
   align-items: center;
@@ -3043,13 +3043,11 @@ function itemEntries(cat, dateKey) {
   });
 }
 
-// 餐次行徽标：把「剩余」直接放在打卡页，吃完之前就能看到还剩多少额度
-// 未标目标：只显示已吃；标了目标：已吃 X · 剩 Y，超出时剩 0 并红字提示超了多少
+// 餐次行徽标：与普通量化项同构 X/Y 千卡。剩余额度只在总记（分类名旁）展示，
+// 行内保持安静，不重复弹窗里已有的信息
 function dietMealBadge(s) {
   if (s.skipped) return '不吃 · 0 千卡';
-  if (!s.hasGoal) return `已吃 ${s.sum} 千卡`;
-  const remain = Math.max(s.goal - s.sum, 0);
-  return s.over ? `已吃 ${s.sum} · 超 ${s.sum - s.goal} 千卡` : `已吃 ${s.sum} · 剩 ${remain} 千卡`;
+  return s.hasGoal ? `${s.sum}/${s.goal} 千卡` : `${s.sum} 千卡`;
 }
 
 // 饮食分类：餐次就是它的「打卡项」。没设目标的那一餐只是入口，不计入分母
@@ -3119,11 +3117,11 @@ function dietTitleTag(cat, dateKey) {
   const gTotal = goals.total;
   const hasTotal = gTotal != null && gTotal > 0;
   if (!(total > 0 || hasTotal)) return '';
-  if (!hasTotal) return `<span class="quant-mini diet-kcal">已吃 ${total} 千卡</span>`;
-  const remain = Math.max(gTotal - total, 0);
-  // 与餐次行同一口径：剩余恒 ≥ 0，超出时红字报超
+  if (!hasTotal) return `<span class="quant-mini diet-kcal">${total} 千卡</span>`;
+  // 剩余额度只在这一处展示：格式与餐次徽标同构（X/Y 千卡），
+  // 没吃时剩 = 全部额度，超标时换成「超 N」并标红
   const over = total > gTotal;
-  const text = over ? `已吃 ${total} · 超 ${total - gTotal} 千卡` : `已吃 ${total} · 剩 ${remain} 千卡`;
+  const text = over ? `超 ${total - gTotal}/${gTotal} 千卡` : `剩 ${gTotal - total}/${gTotal} 千卡`;
   return `<span class="quant-mini diet-kcal${over ? ' over' : ''}">${text}</span>`;
 }
 
@@ -5249,7 +5247,7 @@ function setDietMealSkipped(dateKey, mealKey, skipped) {
 // 走 confirm 只是为了让「点错了」有退路，代价很低
 function markDietSkip(mealKey) {
   const dateKey = formatDate(ui.date);
-  if (!confirm('这餐记为不吃（0 千卡）？')) return;
+  if (!confirm('本餐记为不吃？\n（0 千卡，计入完成打卡）')) return;
   if (!setDietMealSkipped(dateKey, mealKey, true)) {
     showToast('这餐已经有记录，先删掉再标不吃');
     return;
@@ -5262,7 +5260,7 @@ function markDietSkip(mealKey) {
 function cancelDietSkip(mealKey) {
   setDietMealSkipped(formatDate(ui.date), mealKey, false);
   renderDietModal();
-  showToast('已改为正常记录');
+  showToast('已取消不吃标记');
 }
 
 // 连续有记录天数：与 getStreak 同一套算法（今天没记就从昨天起算）
@@ -5348,7 +5346,7 @@ function renderDietModal() {
 
   if (titleEl) titleEl.textContent = s.name;
   if (subEl) subEl.textContent = s.skipped
-    ? `${dayText} · 已标记这餐不吃`
+    ? `${dayText} · 本餐不吃`
     : `${dayText} · ${s.entries.length} 项 · 共 ${s.qtyText}`;
 
   const pct = s.hasGoal ? Math.min(100, Math.round(s.sum / s.goal * 100)) : 0;
@@ -5362,8 +5360,8 @@ function renderDietModal() {
   // 不吃状态下不展示添加入口：这一餐已经明确「不吃」，再往里加食物是自相矛盾
   const addArea = s.skipped
     ? `<div class="diet-skip-banner">
-         <span class="diet-skip-text">这餐记为不吃</span>
-         <button class="diet-skip-cancel" onclick="cancelDietSkip('${s.key}')">改为吃</button>
+         <span class="diet-skip-text">🍽️ 本餐不吃 · 0 千卡</span>
+         <button class="diet-skip-cancel" onclick="cancelDietSkip('${s.key}')">取消</button>
        </div>`
     : `<div class="diet-modal-add-row">
          <button class="diet-modal-add" onclick="switchDietModalView('picker')">＋ 从食物库添加</button>
@@ -5375,7 +5373,7 @@ function renderDietModal() {
       ${s.entries.length
         ? s.entries.map(dietRowHtml).join('')
         : (s.skipped
-            ? '<div class="diet-empty">这餐记为不吃，0 千卡也算完成打卡</div>'
+            ? '<div class="diet-empty">本餐不吃，已按 0 千卡计入完成</div>'
             : '<div class="diet-empty">这一餐还没记录，点下面添加</div>')}
     </div>
     ${addArea}
