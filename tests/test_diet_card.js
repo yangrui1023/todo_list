@@ -103,11 +103,11 @@ entries.push({ id: 'd2', meal: 'breakfast', foodId: 'f2', name: '拿铁', brand:
 entries.push({ id: 'd3', meal: 'lunch', foodId: 'f1', name: '巨无霸', brand: '麦当劳', kcal: 550, qty: 2 });
 S.renderCheckin();
 let h = CK();
-ok(h.indexOf('430/500 千卡') >= 0, '早餐 430/500 达标（绿）');
+ok(h.indexOf('已吃 430 · 剩 70 千卡') >= 0, '早餐 430/500 → 已吃 430 · 剩 70（绿）');
 ok(h.indexOf('quant-badge ok') >= 0, '达标用 .quant-badge.ok');
-ok(h.indexOf('1100/700 千卡') >= 0, '午餐 1100/700 超标');
+ok(h.indexOf('已吃 1100 · 超 400 千卡') >= 0, '午餐 1100/700 超标 → 已吃 1100 · 超 400');
 ok(h.indexOf('quant-badge low') >= 0, '超标用 .quant-badge.low');
-ok(h.indexOf('1530/2000 千卡') >= 0, '分类名旁显示全天 1530/2000 千卡');
+ok(h.indexOf('已吃 1530 · 剩 470 千卡') >= 0, '分类名旁显示全天 已吃 1530 · 剩 470 千卡');
 ok(h.indexOf('diet-kcal over') < 0, '全天未超总目标 → 热量标签不变橙');
 ok(h.indexOf('不计统计') >= 0, '默认带「不计统计」标签');
 
@@ -134,7 +134,7 @@ getEl('dietGoalInput_total').value = '1500';
 S.confirmEditModal();
 ok(S.getDietGoals().total === 1500, '全天目标可单独改成 1500');
 S.renderCheckin();
-ok(CK().indexOf('1530/1500 千卡') >= 0, '全天 1530 超 1500');
+ok(CK().indexOf('已吃 1530 · 超 30 千卡') >= 0, '全天 1530 超 1500 → 已吃 1530 · 超 30');
 ok(CK().indexOf('diet-kcal over') >= 0, '超全天目标 → 热量标签变橙');
 
 console.log('\n=== 6. 停用 / 启用（分类管理页开关）===');
@@ -200,7 +200,7 @@ ok(getEl('dietPickerSum').innerHTML.indexOf('早餐 2 项') >= 0, '底部合计�
 console.log('\n=== 10. 加一份 / 改份数 / 删除 后打卡页同步 ===');
 S.addDietByFood('f3');
 ok(S.dietTotalKcal(S.dietEntriesOf(S.getDietEntries(tk), 'breakfast')) === 670, '同餐再点同食物 → 份数 +1（430+240=670）');
-ok(CK().indexOf('670/500 千卡') >= 0, '打卡页立刻同步为 670/500');
+ok(CK().indexOf('已吃 670 · 超 170 千卡') >= 0, '打卡页立刻同步为 已吃 670 · 超 170');
 ok(CK().indexOf('quant-badge low') >= 0, '670 超 500 → 变橙');
 S.changeDietQty('d1', -1);
 ok(S.dietTotalKcal(S.dietEntriesOf(S.getDietEntries(tk), 'breakfast')) === 430, '减一份回到 430');
