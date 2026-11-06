@@ -3206,12 +3206,12 @@ function dietTitleTag(cat, dateKey) {
   const gTotal = goals.total;
   const hasTotal = gTotal != null && gTotal > 0;
   if (!(total > 0 || hasTotal)) return '';
-  if (!hasTotal) return `<span class="quant-mini diet-kcal">${total} 千卡</span>`;
-  // 剩余额度只在这一处展示：格式与餐次徽标同构（X/Y 千卡），
-  // 没吃时剩 = 全部额度，超标时换成「超 N」并标红
+  // 今日总摄入始终给出：有目标时是「已 N · 剩 M/G」，没目标是「已 N」；
+  // 超标时剩换成「超 K」并标红
+  if (!hasTotal) return `<span class="quant-mini diet-kcal">已 ${total} 千卡</span>`;
   const over = total > gTotal;
-  const text = over ? `超 ${total - gTotal}/${gTotal} 千卡` : `剩 ${gTotal - total}/${gTotal} 千卡`;
-  return `<span class="quant-mini diet-kcal${over ? ' over' : ''}">${text}</span>`;
+  const rest = over ? `超 ${total - gTotal}` : `剩 ${gTotal - total}`;
+  return `<span class="quant-mini diet-kcal${over ? ' over' : ''}">已 ${total} · ${rest}/${gTotal} 千卡</span>`;
 }
 
 // 统计页：与日期无关的条目清单，分母与「总打卡次数」都用它。
@@ -5178,16 +5178,16 @@ function openFoodAddModal(prefill) {
 
   const sel = document.getElementById('foodBrandSelect');
   const box = document.getElementById('foodBrandNew');
-  const wantNew = p.brandNew || brands.length === 0 || (p.brand && brands.indexOf(p.brand) < 0);
+  // 默认选中该类别下的第一个已有品牌，只有用户明确点了「新建品牌」才落 __new__。
+  // 用户反馈：打开新增页总是停在「新建品牌」，每次都要手动换回已有品牌，很烦
+  const wantNew = !!p.brandNew || (brands.length === 0 && !p.brand);
   if (wantNew) {
     if (sel) sel.value = '__new__';
-    if (box) {
-      box.style.display = 'block';
-      // 「新增食物」时把当前筛选的品牌带过来；点「新建品牌」就不预填，用户多半是要换个名字
-      if (p.brand && !p.brandNew) box.value = p.brand;
-    }
-  } else if (p.brand && sel) {
-    sel.value = p.brand;
+    if (box) box.style.display = 'block';
+  } else if (sel) {
+    // 用户从 picker 带了品牌过来且该品牌存在 → 选中它；否则选第一个已有品牌
+    sel.value = (p.brand && brands.indexOf(p.brand) >= 0) ? p.brand : brands[0];
+    if (box) box.style.display = 'none';
   }
   setTimeout(() => {
     const target = wantNew
@@ -5225,9 +5225,12 @@ function onFoodKindChange(prefix) {
   const prev = sel.value;
   sel.innerHTML = brandOptionsHtml(brands);
   if (prev && prev !== '__new__' && brands.indexOf(prev) >= 0) {
-    sel.value = prev;
+    sel.value = prev;                       // 原品牌在新类别里也有 → 保留
+  } else if (brands.length > 0) {
+    sel.value = brands[0];                  // 没有就选第一个已有品牌，别落在「新建品牌」上
+    if (box) { box.style.display = 'none'; box.value = ''; }
   } else {
-    sel.value = '__new__';
+    sel.value = '__new__';                  // 该类别还没有任何品牌，才让用户新建
     if (box) { box.style.display = 'block'; box.value = ''; box.focus(); }
     return;
   }

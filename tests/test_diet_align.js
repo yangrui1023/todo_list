@@ -88,7 +88,7 @@ S.getDietEntries(TK).push({ id: 'x1', meal: 'breakfast', name: '三明治', bran
 S.renderCheckin();
 ok(/category-count">1\/3</.test(CK()), '记录早餐后 1/3（分母不变，分子跟着达标走）');
 ok(CK().indexOf('240/500 千卡') >= 0, '餐次徽章仍是 240/500 千卡');
-ok(CK().indexOf('剩 1760/2000 千卡') >= 0, '分类名旁显示全天剩 1760/2000 千卡');
+ok(CK().indexOf('已 240 · 剩 1760/2000 千卡') >= 0, '分类名旁显示 今日总摄入 + 剩余');
 S.renderCheckin();
 ok(PC().indexOf('/ 4') >= 0, '纳入统计时分母 = 1 个普通项 + 3 个目标餐');
 ok(PC().indexOf('1 / 4') >= 0, '早餐达标计入完成数');

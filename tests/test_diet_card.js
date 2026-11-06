@@ -107,7 +107,7 @@ ok(h.indexOf('430/500 千卡') >= 0, '早餐 430/500 达标（绿）');
 ok(h.indexOf('quant-badge ok') >= 0, '达标用 .quant-badge.ok');
 ok(h.indexOf('1100/700 千卡') >= 0, '午餐 1100/700 超标');
 ok(h.indexOf('quant-badge low') >= 0, '超标用 .quant-badge.low');
-ok(h.indexOf('剩 470/2000 千卡') >= 0, '分类名旁显示全天剩 470/2000 千卡');
+ok(h.indexOf('已 1530 · 剩 470/2000 千卡') >= 0, '分类名旁显示 今日总摄入 + 剩余（已 1530 · 剩 470/2000 千卡）');
 ok(h.indexOf('diet-kcal over') < 0, '全天未超总目标 → 热量标签不变橙');
 ok(h.indexOf('不计统计') >= 0, '默认带「不计统计」标签');
 
@@ -134,7 +134,8 @@ getEl('dietGoalInput_total').value = '1500';
 S.confirmEditModal();
 ok(S.getDietGoals().total === 1500, '全天目标可单独改成 1500');
 S.renderCheckin();
-ok(CK().indexOf('超 30/1500 千卡') >= 0, '全天 1530 超 1500 → 超 30/1500');
+ok(CK().indexOf('已 1530 · 超 30/1500 千卡') >= 0, '全天 1530 超 1500 → 已 1530 · 超 30/1500');
+ok(CK().indexOf('diet-kcal over') >= 0, '超标时热量标签变橙');
 ok(CK().indexOf('diet-kcal over') >= 0, '超全天目标 → 热量标签变橙');
 
 console.log('\n=== 6. 停用 / 启用（分类管理页开关）===');
