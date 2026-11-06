@@ -1294,22 +1294,75 @@ body {
   box-sizing: border-box;
 }
 .food-search:focus { border-color: var(--primary); }
-.food-filter { display: flex; gap: 8px; margin-bottom: 12px; }
+/* 类别 chip 条：类别数量不定（可自定义），所以横向滚动而不是均分宽度 */
+.food-filter {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.food-filter::-webkit-scrollbar { display: none; }
 .food-filter-btn {
-  flex: 1;
-  padding: 8px 0;
+  flex: none;
+  padding: 7px 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 16px;
   background: var(--card-bg);
   color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
   transition: all .2s;
+  white-space: nowrap;
 }
 .food-filter-btn.active {
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
+}
+/* 末尾的「＋ 新建类别」：虚线描边，视觉上明确是「添加」而不是一个筛选项 */
+.food-filter-btn.add {
+  border-style: dashed;
+  color: var(--text-muted);
+  padding: 7px 12px;
+}
+/* 类别弹窗里的图标选择：一排方块，选中的那个描边高亮 */
+.kind-icon-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 6px;
+}
+.kind-icon-btn {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  font-size: 20px;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.kind-icon-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+/* 弹窗底部的删除入口：低调的红字，别做成一个大红按钮抢戏 */
+.modal-del-btn {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 10px;
+  border: 1px dashed rgba(220, 60, 60, .45);
+  border-radius: 10px;
+  background: transparent;
+  color: rgb(200, 50, 50);
+  font-size: 13px;
+  cursor: pointer;
 }
 .food-brand-card {
   background: var(--card-bg);
@@ -1949,11 +2002,7 @@ body {
 
     <input class="food-search" id="foodSearch" type="text" placeholder="🔍 搜索品牌或食物名称" oninput="renderFoods()">
 
-    <div class="food-filter">
-      <button class="food-filter-btn active" data-food-filter="all" onclick="setFoodFilter('all')">全部</button>
-      <button class="food-filter-btn" data-food-filter="drink" onclick="setFoodFilter('drink')">🥤 饮品</button>
-      <button class="food-filter-btn" data-food-filter="food" onclick="setFoodFilter('food')">🍱 食物</button>
-    </div>
+    <div class="food-filter" id="foodFilterBar"></div>
 
     <div id="foodList"></div>
   </div>
@@ -2057,6 +2106,18 @@ const DIET_MEAL_KEYS = DIET_MEALS.map(m => m.key);
 // 三餐是「每餐上限」，total 是全天总目标，两者独立、互不联动
 const DIET_GOAL_DEFAULT = { breakfast: 500, lunch: 700, dinner: 600, total: 2000 };
 
+// ===== 食物类别：内置四类 + 用户自定义 =====
+// 存在 state.foodKinds，每项 { id, name, icon, builtin }。
+// id 一经生成不再变（改名 / 换图标都不动它），因为 foods[].kind 存的是 id。
+// 老数据只有 'food' / 'drink' 两种 kind，两个内置 id 保持原样就能零迁移。
+const FOOD_KIND_BUILTINS = [
+  { id: 'food',  name: '食物', icon: '🍱', builtin: true },
+  { id: 'drink', name: '饮品', icon: '🥤', builtin: true },
+  { id: 'snack', name: '零食', icon: '🍪', builtin: true },
+  { id: 'fruit', name: '水果', icon: '🍎', builtin: true }
+];
+const FOOD_KIND_DEFAULT_ID = 'food';
+
 // 真实数据由 loadData() 从本地缓存接管，这里的声明放在下面 makeEmptyState 之后
 
 // ===== 界面状态：只决定「怎么显示」，不进云同步、不进导出 =====
@@ -2102,7 +2163,8 @@ function makeEmptyState() {
     schemaVersion: SCHEMA_VERSION,
     categories: [],
     records: {},        // { "2026-08-10": [{ id, value?, note? }] }
-    foods: [],          // [{ id, kind: 'drink'|'food', brand, name, kcal, unit }]
+    foods: [],          // [{ id, kind, brand, name, kcal, unit }]，kind 是 foodKinds 里的 id
+    foodKinds: FOOD_KIND_BUILTINS.map(k => Object.assign({}, k)),   // 食物类别，可自定义
     diets: {},          // { "2026-08-10": [{ id, meal, foodId, name, brand, kcal, qty, unit }] }
     dietGoals: Object.assign({}, DIET_GOAL_DEFAULT),
     dietMealNotes: {},  // { "2026-08-10": { breakfast: "备注" } }
@@ -2167,6 +2229,9 @@ function normalizeState(s) {
   if (!s.records || typeof s.records !== 'object' || Array.isArray(s.records)) s.records = {};
   if (!Array.isArray(s.foods)) s.foods = [];
   if (!s.diets || typeof s.diets !== 'object' || Array.isArray(s.diets)) s.diets = {};
+  if (!Array.isArray(s.foodKinds) || s.foodKinds.length === 0) {
+    s.foodKinds = FOOD_KIND_BUILTINS.map(k => Object.assign({}, k));
+  }
   if (!s.dietGoals || typeof s.dietGoals !== 'object') s.dietGoals = {};
   s.dietGoals = Object.assign({}, DIET_GOAL_DEFAULT, s.dietGoals);
   if (!s.dietMealNotes || typeof s.dietMealNotes !== 'object') s.dietMealNotes = {};
@@ -2269,13 +2334,38 @@ function sanitizeState(s) {
     if (Object.keys(m).length === 0) delete s.dietSkipped[key];
   });
 
+  // 食物类别：先清洗类别表，再拿它校正每条食物的 kind
+  s.foodKinds = s.foodKinds.filter(k => k && typeof k === 'object').map(k => {
+    if (!k.id || !ID_RE.test(String(k.id))) k.id = genId('fkind');
+    k.name = clipStr(k.name, 12) || '未命名';
+    k.icon = clipStr(k.icon, 4) || '🍽️';
+    k.builtin = !!k.builtin;
+    return k;
+  });
+  // id 去重：后出现的重复项丢掉，只保留第一个
+  const kindSeen = new Set();
+  s.foodKinds = s.foodKinds.filter(k => {
+    if (kindSeen.has(k.id)) return false;
+    kindSeen.add(k.id);
+    return true;
+  });
+  // 内置类别少一个就补回来（用户在旧版本删过、或数据被截断）
+  FOOD_KIND_BUILTINS.forEach(b => {
+    if (!kindSeen.has(b.id)) {
+      s.foodKinds.unshift(Object.assign({}, b));
+      kindSeen.add(b.id);
+    }
+  });
+  const validKinds = new Set(s.foodKinds.map(k => k.id));
+
   s.foods = s.foods.filter(f => f && typeof f === 'object').map(f => {
     if (!f.id || !ID_RE.test(String(f.id)) || seenIds.has(f.id)) f.id = genId('food');
     seenIds.add(f.id);
     f.name = clipStr(f.name, 30);
     f.brand = clipStr(f.brand, 20);
     if (!Number.isFinite(Number(f.kcal))) f.kcal = 0;
-    if (f.kind !== 'drink') f.kind = 'food';
+    // kind 指向已删除的类别 → 回落到默认类别，不让食物凭空消失
+    if (!f.kind || !validKinds.has(f.kind)) f.kind = FOOD_KIND_DEFAULT_ID;
     if (f.unit !== 'gram') f.unit = 'serving';
     return f;
   });
@@ -2283,8 +2373,7 @@ function sanitizeState(s) {
   return s;
 }
 
-// 统一补全 state 结构：旧本地缓存 / 旧 JSON 备份 / 云端旧记录都可能缺字段。
-// 顺序不能反：先按版本迁移，再整形兜底，最后清洗入口数据。
+// 统一补全 state 结构：旧本地缓存 / 旧 JSON 备份 / 云端旧记录都可能缺字段。// 顺序不能反：先按版本迁移，再整形兜底，最后清洗入口数据。
 function ensureStateShape() {
   if (!state || typeof state !== 'object' || Array.isArray(state)) state = makeEmptyState();
   let v = Number(state.schemaVersion);
@@ -4132,6 +4221,11 @@ function openEditModal(title, sub, bodyHtml, state, okLabel) {
   document.getElementById('editModal').classList.add('show');
   const first = document.querySelector('#editModalBody input');
   if (first) setTimeout(() => first.focus(), 50);
+  // 新增 / 编辑食物弹窗在这里统一跑一次「类别 → 品牌」联动，
+  // 免得每个调用方都要记得手动调 —— 漏调就会出现「选的是饮品，品牌却列着麦当劳」
+  if (document.getElementById('foodKind')) {
+    onFoodKindChange('add');
+  } else if (document.getElementById('modalFoodKind')) onFoodKindChange('edit');
 }
 
 function closeEditModal() {
@@ -4182,7 +4276,7 @@ function confirmEditModal() {
   } else if (s.type === 'editFood') {
     const f = getFoods().find(x => x.id === s.id);
     if (!f) return;
-    const kind = (document.getElementById('modalFoodKind') || {}).value || 'food';
+    const kind = (document.getElementById('modalFoodKind') || {}).value || FOOD_KIND_DEFAULT_ID;
     const brand = ((document.getElementById('modalFoodBrand') || {}).value || '').trim();
     const name = ((document.getElementById('modalFoodName') || {}).value || '').trim();
     const kcalRaw = ((document.getElementById('modalFoodKcal') || {}).value || '').replace(/[^0-9.]/g, '');
@@ -4244,6 +4338,23 @@ function confirmEditModal() {
     const meal = s.meal;
     closeEditModal();
     if (fromDiet) returnToDietPicker(meal, food);
+    return;
+  } else if (s.type === 'addFoodKind') {
+    const name = ((document.getElementById('kindName') || {}).value || '').trim();
+    if (!name) { showToast('请填写类别名称'); return; }
+    const k = addFoodKind(name, currentKindIcon());
+    if (!k) return;              // 重名等失败时保持弹窗打开
+    closeEditModal();
+    setFoodFilter(k.id);         // 直接跳到新类别，否则刚建的类别里是空的、看不出变化
+    return;
+  } else if (s.type === 'editFoodKind') {
+    const name = ((document.getElementById('kindName') || {}).value || '').trim();
+    if (!name) { showToast('请填写类别名称'); return; }
+    if (!updateFoodKind(s.id, { name: name, icon: currentKindIcon() })) return;
+    closeEditModal();
+    renderFoodFilterBar();
+    renderFoods();
+    showToast('已保存');
     return;
   } else if (s.type === 'quantExport') {
     const sv = ((document.getElementById('expStart') || {}).value || '').trim();
@@ -4753,13 +4864,156 @@ function permanentDeleteItem(catId, itemId) {
    ========================================================================== */
 
 
-function foodKindLabel(kind) {
-  return kind === 'drink' ? '🥤 饮品' : '🍱 食物';
-}
-
 function getFoods() {
   if (!Array.isArray(state.foods)) state.foods = [];
   return state.foods;
+}
+
+// ===== 食物类别读写 =====
+// state.foodKinds 是唯一来源，所有下拉 / chip / 分组都从这里取，不再写死 'food'|'drink'
+function getFoodKinds() {
+  if (!Array.isArray(state.foodKinds) || state.foodKinds.length === 0) {
+    state.foodKinds = FOOD_KIND_BUILTINS.map(k => Object.assign({}, k));
+  }
+  return state.foodKinds;
+}
+
+function getFoodKind(id) {
+  return getFoodKinds().find(k => k.id === id) || null;
+}
+
+// 用户可能从其它标签页 / 旧版云端数据里拿回一个已经不存在的类别 id。
+// 记账筛选会把它写进 ui.diet.kind / ui.foodFilter，遇到这种就当成「全部」处理，
+// 否则列表会一直是空的，用户还以为食物全没了。
+function knownKindOrAll(id) {
+  return (id && getFoodKind(id)) ? id : 'all';
+}
+
+// 找不到类别时给个占位，保证 label / icon 永远有值可渲染
+function foodKindMeta(id) {
+  return getFoodKind(id) || { id: id, name: '未分类', icon: '🍽️' };
+}
+
+function foodKindLabel(id) {
+  const k = foodKindMeta(id);
+  return `${k.icon} ${k.name}`;
+}
+
+// 某个类别下已有的品牌（去重 + 中文排序）。kind 为空 = 全部品牌
+function brandsOfKind(kind) {
+  const out = [];
+  getFoods().forEach(f => {
+    if (kind && f.kind !== kind) return;
+    const b = (f.brand || '').trim();
+    if (b && out.indexOf(b) < 0) out.push(b);
+  });
+  out.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  return out;
+}
+
+// 新增一个自定义类别。重名直接拒（否则两个「零食」在筛选条上分不清）
+function addFoodKind(name, icon) {
+  const n = String(name || '').trim();
+  if (!n) { showToast('请填写类别名称'); return null; }
+  const kinds = getFoodKinds();
+  if (kinds.some(k => k.name === n)) { showToast('这个类别已经存在'); return null; }
+  const kind = { id: genId('fkind'), name: n.slice(0, 12), icon: String(icon || '').trim().slice(0, 4) || '🍽️', builtin: false };
+  kinds.push(kind);
+  commit();
+  showToast(`已添加类别「${kind.name}」`);
+  return kind;
+}
+
+// 改名 / 换图标：内置类别也不许改 id，但名字和图标可以改
+function updateFoodKind(id, patch) {
+  const k = getFoodKind(id);
+  if (!k) return false;
+  if (patch.name != null) {
+    const n = String(patch.name).trim();
+    if (!n) { showToast('请填写类别名称'); return false; }
+    if (getFoodKinds().some(x => x.id !== id && x.name === n)) { showToast('这个类别已经存在'); return false; }
+    k.name = n.slice(0, 12);
+  }
+  if (patch.icon != null) k.icon = String(patch.icon).trim().slice(0, 4) || '🍽️';
+  commit();
+  return true;
+}
+
+function foodCountOfKind(id) {
+  return getFoods().filter(f => f.kind === id).length;
+}
+
+// 删除自定义类别：内置不允许删；类下有食物也不允许删（否则那些食物会变成孤儿）
+function deleteFoodKind(id) {
+  const k = getFoodKind(id);
+  if (!k) return false;
+  if (k.builtin) { showToast('内置类别不能删除'); return false; }
+  const n = foodCountOfKind(id);
+  if (n > 0) { showToast(`「${k.name}」下还有 ${n} 项食物，先移走再删除`); return false; }
+  state.foodKinds = getFoodKinds().filter(x => x.id !== id);
+  // 当前筛选正停在这个类别上 → 回到全部，否则列表会空着
+  if (ui.foodFilter === id) ui.foodFilter = 'all';
+  if (ui.diet.kind === id) ui.diet.kind = 'all';
+  commit();
+  showToast(`已删除类别「${k.name}」`);
+  return true;
+}
+
+// 新建 / 编辑类别弹窗：没有 id = 新建；有 id = 改自定义类别（内置也能改名换图标）
+function openFoodKindModal(id) {
+  const kind = id ? getFoodKind(id) : null;
+  if (id && !kind) return;
+  // 常用图标直接点选，省得用户去输入法里翻 emoji
+  const ICONS = ['🍱', '🥤', '🍪', '🍎', '🥗', '🍜', '🍰', '☕', '🍺', '🍗'];
+  const cur = kind ? kind.icon : '🍽️';
+  const iconList = ICONS.indexOf(cur) >= 0 ? ICONS : [cur].concat(ICONS);
+  const delBtn = (kind && !kind.builtin)
+    ? `<button class="modal-del-btn" onclick="onFoodKindDelete('${kind.id}')">删除这个类别</button>` : '';
+
+  openEditModal(
+    kind ? '编辑类别' : '新建类别',
+    kind ? '改个名字或换个图标，已经有食物的记录不受影响' : '比如「乳制品」「补剂」，新建后就能归类食物了',
+    `<label>类别名称</label>
+     <input class="modal-input" id="kindName" type="text" maxlength="12" placeholder="如：乳制品" value="${escAttr(kind ? kind.name : '')}">
+     <label>图标</label>
+     <div class="kind-icon-row" id="kindIconRow">
+       ${iconList.map(ic => `<button type="button" class="kind-icon-btn${ic === cur ? ' active' : ''}" data-icon="${escAttr(ic)}" onclick="pickKindIcon(this)">${escapeHtml(ic)}</button>`).join('')}
+     </div>${delBtn}`,
+    kind ? { type: 'editFoodKind', id: kind.id } : { type: 'addFoodKind' },
+    kind ? '保存' : '创建');
+
+  // 当前图标不在快捷列表里时也允许手输任意 emoji
+  const row = document.getElementById('kindIconRow');
+  if (row) row.dataset.icon = cur;
+}
+
+// 点图标 = 单选，写回 data-icon 供确认时读取
+function pickKindIcon(btn) {
+  const row = document.getElementById('kindIconRow');
+  if (!row) return;
+  row.dataset.icon = btn.dataset.icon || '';
+  Array.prototype.forEach.call(row.children, el => el.classList.toggle('active', el === btn));
+}
+
+function currentKindIcon() {
+  const row = document.getElementById('kindIconRow');
+  if (!row) return '🍽️';
+  const v = row.dataset.icon;
+  // 数据集在真实 DOM 里是字符串；没有就回落到第一个图标
+  return v || '🍽️';
+}
+
+// 删除类别：先确认。类下有食物时 deleteFoodKind 会拒绝并提示，不会误删成孤儿数据
+function onFoodKindDelete(id) {
+  const k = getFoodKind(id);
+  if (!k) return;
+  const n = foodCountOfKind(id);
+  if (n > 0) { showToast(`「${k.name}」下还有 ${n} 项食物，先移走再删除`); return; }
+  if (!confirm(`删除类别「${k.name}」？`)) return;
+  closeEditModal();
+  deleteFoodKind(id);
+  renderFoodFilterBar();
+  renderFoods();
 }
 
 // 品牌下拉：已有品牌可直接选 +「＋ 新建品牌」
@@ -4767,11 +5021,14 @@ function renderFoodBrandOptions() {
   const sel = document.getElementById('foodBrandSelect');
   if (!sel) return;
   const prev = sel.value;
-  const brands = [...new Set(getFoods().map(f => (f.brand || '').trim()).filter(Boolean))];
-  brands.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-  sel.innerHTML = brands.map(b => `<option value="${escAttr(b)}">${escapeHtml(b)}</option>`).join('')
-    + `<option value="__new__">＋ 新建品牌…</option>`;
-  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  // 品牌按当前选中的类别过滤：选了饮品就只列饮品用过的品牌。
+  // 读不到值（弹窗渲染中间态）就直接返回，别把下拉刷成一整份全部品牌
+  const kindEl = document.getElementById('foodKind');
+  const kind = kindEl && kindEl.value;
+  if (!kind) return;
+  sel.innerHTML = brandOptionsHtml(brandsOfKind(kind));
+  const list = [...sel.options].map(o => o.value);
+  sel.value = list.indexOf(prev) >= 0 ? prev : list[0];
   // 仅同步“新建品牌”输入框的显隐，不抢焦点（避免每次重渲染跳焦点）
   const box = document.getElementById('foodBrandNew');
   if (box) box.style.display = (sel.value === '__new__') ? 'block' : 'none';
@@ -4788,20 +5045,34 @@ function onFoodBrandChange() {
 
 function setFoodFilter(kind) {
   ui.foodFilter = kind;
-  document.querySelectorAll('.food-filter-btn').forEach(b => {
-    b.classList.toggle('active', b.getAttribute('data-food-filter') === kind);
-  });
+  renderFoodFilterBar();
   renderFoods();
+}
+
+// 类别 chip 条：全部 + 各类别 + 末尾「＋ 新建类别」
+function renderFoodFilterBar() {
+  const el = document.getElementById('foodFilterBar');
+  if (!el) return;
+  const kinds = getFoodKinds();
+  // 当前选中的类别被删掉了 → 回落到全部，否则筛出来永远是空
+  if (ui.foodFilter !== 'all' && !getFoodKind(ui.foodFilter)) ui.foodFilter = 'all';
+  el.innerHTML = `<button class="food-filter-btn${ui.foodFilter === 'all' ? ' active' : ''}"
+      data-food-filter="all" onclick="setFoodFilter('all')">全部</button>
+    ${kinds.map(k => `<button class="food-filter-btn${ui.foodFilter === k.id ? ' active' : ''}"
+      data-food-filter="${escAttr(k.id)}" onclick="setFoodFilter('${k.id}')"
+      ${k.builtin ? '' : `ondblclick="openFoodKindModal('${k.id}')" title="双击可重命名"`}>${escapeHtml(`${k.icon} ${k.name}`)}</button>`).join('')}
+    <button class="food-filter-btn add" onclick="openFoodKindModal()">＋ 新建类别</button>`;
 }
 
 function renderFoods() {
   const listEl = document.getElementById('foodList');
   if (!listEl) return;
+  renderFoodFilterBar();
   renderFoodBrandOptions();
 
   const kw = ((document.getElementById('foodSearch') || {}).value || '').trim().toLowerCase();
   let foods = getFoods().slice();
-  if (ui.foodFilter !== 'all') foods = foods.filter(f => (f.kind || 'food') === ui.foodFilter);
+  if (ui.foodFilter !== 'all') foods = foods.filter(f => f.kind === ui.foodFilter);
   if (kw) {
     foods = foods.filter(f =>
       (f.brand || '').toLowerCase().includes(kw) || (f.name || '').toLowerCase().includes(kw));
@@ -4812,12 +5083,12 @@ function renderFoods() {
     return;
   }
 
-  // 先按分类分组（饮品 / 食物），组内再按品牌合并成块
+  // 先按类别分组（按类别表的顺序），组内再按品牌合并成块
   let html = '';
-  ['drink', 'food'].forEach(kind => {
-    const inKind = foods.filter(f => (f.kind || 'food') === kind);
+  getFoodKinds().forEach(kind => {
+    const inKind = foods.filter(f => f.kind === kind.id);
     if (inKind.length === 0) return;
-    html += `<div class="manage-section-title" style="margin:14px 0 8px;">${foodKindLabel(kind)}</div>`;
+    html += `<div class="manage-section-title" style="margin:14px 0 8px;">${escapeHtml(foodKindLabel(kind.id))}</div>`;
     const brands = [...new Set(inKind.map(f => (f.brand || '').trim()))].filter(Boolean);
     brands.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
     brands.forEach(brand => {
@@ -4842,7 +5113,7 @@ function renderFoods() {
 function addFood() {
   const kindEl = document.getElementById('foodKind');
   const sel = document.getElementById('foodBrandSelect');
-  const kind = (kindEl && kindEl.value) || 'food';
+  const kind = (kindEl && kindEl.value) || FOOD_KIND_DEFAULT_ID;
   const isNew = sel && sel.value === '__new__';
   const brand = isNew
     ? ((document.getElementById('foodBrandNew') || {}).value || '').trim()
@@ -4872,23 +5143,21 @@ function addFood() {
 // 从记账 picker 过来时带上 fromDiet，添加完会回到 picker 并自动加一份
 function openFoodAddModal(prefill) {
   const p = prefill || {};
-  const brands = [...new Set(getFoods().map(f => (f.brand || '').trim()).filter(Boolean))];
-  brands.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-  const options = brands.map(b => `<option value="${escAttr(b)}">${escapeHtml(b)}</option>`).join('')
-    + `<option value="__new__">＋ 新建品牌…</option>`;
-  const kind = p.kind === 'drink' ? 'drink' : 'food';
+  const kinds = getFoodKinds();
+  const kind = (p.kind && getFoodKind(p.kind)) ? p.kind : FOOD_KIND_DEFAULT_ID;
   const fromDiet = !!p.fromDiet;
+  // 品牌只列当前类别下的：选了「饮品」就不该看到「麦当劳」
+  const brands = brandsOfKind(kind);
 
   openEditModal(
     fromDiet ? '新增食物' : '新增食物记录',
-    fromDiet ? '添加后自动加一份到当前餐' : '同一品牌会自动归到同一块',
-    `<label>分类</label>
-     <select class="modal-input" id="foodKind">
-       <option value="food"${kind === 'food' ? ' selected' : ''}>🍱 食物</option>
-       <option value="drink"${kind === 'drink' ? ' selected' : ''}>🥤 饮品</option>
+    fromDiet ? '添加后自动加一份到当前餐' : '同一类别下同品牌会归到同一块',
+    `<label>类别</label>
+     <select class="modal-input" id="foodKind" onchange="onFoodKindChange('add')">
+       ${kinds.map(k => `<option value="${escAttr(k.id)}"${k.id === kind ? ' selected' : ''}>${escapeHtml(`${k.icon} ${k.name}`)}</option>`).join('')}
      </select>
      <label>品牌</label>
-     <select class="modal-input" id="foodBrandSelect" onchange="onFoodBrandChange()">${options}</select>
+     <select class="modal-input" id="foodBrandSelect" onchange="onFoodBrandChange()">${brandOptionsHtml(brands)}</select>
      <input class="modal-input" id="foodBrandNew" type="text" maxlength="20" placeholder="输入新品牌名称" style="display:none">
      <label>食物名称</label>
      <input class="modal-input" id="foodName" type="text" maxlength="30" placeholder="如：巨无霸" value="${escAttr(p.name || '')}">
@@ -4928,6 +5197,43 @@ function openFoodAddModal(prefill) {
   }, 80);
 }
 
+// 品牌下拉的 option 列表，末尾固定一个「＋ 新建品牌」
+function brandOptionsHtml(brands) {
+  return brands.map(b => `<option value="${escAttr(b)}">${escapeHtml(b)}</option>`).join('')
+    + `<option value="__new__">＋ 新建品牌…</option>`;
+}
+
+// 新增弹窗里切换类别：品牌下拉只保留该类别下的，
+// 原来选中的品牌在新类别里不存在时自动切到「新建品牌」，避免留下一个无效值
+function onFoodKindChange(prefix) {
+  const isEdit = prefix === 'edit';
+  const kindEl = document.getElementById(isEdit ? 'modalFoodKind' : 'foodKind');
+  if (!kindEl) return;
+  const kind = kindEl.value;
+  const brands = brandsOfKind(kind);
+
+  if (isEdit) {
+    // 编辑弹窗的品牌是 input + datalist，换类别只换候选项，不动用户已填的值
+    const dl = document.getElementById('modalFoodBrandList');
+    if (dl) dl.innerHTML = brands.map(b => `<option value="${escAttr(b)}"></option>`).join('');
+    return;
+  }
+
+  const sel = document.getElementById('foodBrandSelect');
+  const box = document.getElementById('foodBrandNew');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = brandOptionsHtml(brands);
+  if (prev && prev !== '__new__' && brands.indexOf(prev) >= 0) {
+    sel.value = prev;
+  } else {
+    sel.value = '__new__';
+    if (box) { box.style.display = 'block'; box.value = ''; box.focus(); }
+    return;
+  }
+  if (box) box.style.display = 'none';
+}
+
 // 切换计价单位时，热量输入框的标签 / 占位符跟着变 ——
 // 不写清楚「每份」还是「每 100 克」，用户没法判断该填 550 还是 116
 function onFoodUnitChange(prefix) {
@@ -4945,7 +5251,7 @@ function onFoodUnitChange(prefix) {
 // 记账 picker 里的三个新增入口都走这里：mode = 'food'（普通新增）| 'brand'（新建品牌）
 function openFoodAddFromPicker(mode) {
   openFoodAddModal({
-    kind: ui.diet.kind === 'all' ? 'food' : ui.diet.kind,
+    kind: ui.diet.kind === 'all' ? FOOD_KIND_DEFAULT_ID : ui.diet.kind,
     brand: ui.diet.brand,
     brandNew: mode === 'brand',
     name: mode === 'brand' ? '' : ui.diet.kw.trim(),
@@ -4956,7 +5262,7 @@ function openFoodAddFromPicker(mode) {
 
 // 新增完食物回到记账 picker：筛选跟着新食物走，保证用户能看见刚加的那条
 function returnToDietPicker(meal, food) {
-  ui.diet.kind = (food.kind === 'drink') ? 'drink' : 'food';
+  ui.diet.kind = knownKindOrAll(food.kind);
   ui.diet.brand = (food.brand || '').trim();
   ui.diet.kw = '';
   openDietMealModal(meal, true);
@@ -4979,12 +5285,12 @@ function editFood(id) {
   const list = getFoods();
   const f = list.find(x => x.id === id);
   if (!f) return;
-  const brands = [...new Set(list.map(x => (x.brand || '').trim()).filter(Boolean))];
+  // 候选项只列当前类别下的品牌；用户仍可手输一个全新的品牌名
+  const brands = brandsOfKind(f.kind);
   openEditModal('编辑食物', `${foodKindLabel(f.kind)} · ${f.brand}`,
-    `<label>分类</label>
-     <select class="modal-input" id="modalFoodKind">
-       <option value="food" ${(f.kind || 'food') === 'drink' ? '' : 'selected'}>🍱 食物</option>
-       <option value="drink" ${(f.kind || 'food') === 'drink' ? 'selected' : ''}>🥤 饮品</option>
+    `<label>类别</label>
+     <select class="modal-input" id="modalFoodKind" onchange="onFoodKindChange('edit')">
+       ${getFoodKinds().map(k => `<option value="${escAttr(k.id)}"${k.id === f.kind ? ' selected' : ''}>${escapeHtml(`${k.icon} ${k.name}`)}</option>`).join('')}
      </select>
      <label>品牌</label>
      <input class="modal-input" id="modalFoodBrand" maxlength="20" list="modalFoodBrandList" value="${escAttr(f.brand)}">
@@ -5440,29 +5746,24 @@ function onDietPickerSearch(v) {
   renderDietPickerList();
 }
 
-// 当前品类下出现过的品牌（去重 + 中文排序）
+// 当前品类下出现过的品牌（去重 + 中文排序）；kind 为 all 时列全部
 function dietPickerBrands(kind) {
-  const out = [];
-  getFoods().forEach(f => {
-    if (kind !== 'all' && (f.kind || 'food') !== kind) return;
-    const b = (f.brand || '').trim();
-    if (b && out.indexOf(b) < 0) out.push(b);
-  });
-  out.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-  return out;
+  return brandsOfKind(kind === 'all' ? '' : kind);
 }
 
 // 筛选条：品类一行 + 品牌一行；品牌行末尾是「＋ 新建品牌」
 function renderDietPickerFilters() {
   const el = document.getElementById('dietPickerFilters');
   if (!el) return;
+  // 类别被删掉后可能留下一个失效的 id，先修正再做后面的品牌回落判断
+  ui.diet.kind = knownKindOrAll(ui.diet.kind);
   const brands = dietPickerBrands(ui.diet.kind);
   // 换了品类、或那个品牌的食物被删光了：选中的品牌已经不在列表里，回落到全部
   if (ui.diet.brand && brands.indexOf(ui.diet.brand) < 0) ui.diet.brand = '';
-  const kinds = [['all', '全部'], ['drink', '🥤 饮品'], ['food', '🍱 食物']];
-  el.innerHTML = `<div class="diet-filter-row">
-      ${kinds.map(k => `<button class="diet-filter-chip${ui.diet.kind === k[0] ? ' active' : ''}" onclick="setDietPickerKind('${k[0]}')">${k[1]}</button>`).join('')}
-    </div>
+  const chips = [`<button class="diet-filter-chip${ui.diet.kind === 'all' ? ' active' : ''}" onclick="setDietPickerKind('all')">全部</button>`]
+    .concat(getFoodKinds().map(k => `<button class="diet-filter-chip${ui.diet.kind === k.id ? ' active' : ''}"
+      onclick="setDietPickerKind('${k.id}')">${escapeHtml(`${k.icon} ${k.name}`)}</button>`));
+  el.innerHTML = `<div class="diet-filter-row">${chips.join('')}</div>
     <div class="diet-filter-row diet-brand-row">
       <button class="diet-filter-chip${ui.diet.brand ? '' : ' active'}" onclick="setDietPickerBrand(0)">全部品牌</button>
       ${brands.map((b, i) => `<button class="diet-filter-chip${ui.diet.brand === b ? ' active' : ''}" onclick="setDietPickerBrand(${i + 1})">${escapeHtml(b)}</button>`).join('')}
@@ -5471,7 +5772,7 @@ function renderDietPickerFilters() {
 }
 
 function setDietPickerKind(kind) {
-  ui.diet.kind = (kind === 'drink' || kind === 'food') ? kind : 'all';
+  ui.diet.kind = knownKindOrAll(kind);
   renderDietPickerFilters();   // 内部会把已失效的品牌筛选清掉
   renderDietPickerList();
 }
@@ -5491,7 +5792,7 @@ function renderDietPickerList() {
   const all = getFoods();
   const kw = ui.diet.kw.trim().toLowerCase();
 
-  let foods = all.filter(f => ui.diet.kind === 'all' || (f.kind || 'food') === ui.diet.kind);
+  let foods = all.filter(f => ui.diet.kind === 'all' || f.kind === ui.diet.kind);
   if (ui.diet.brand) foods = foods.filter(f => (f.brand || '').trim() === ui.diet.brand);
   if (kw) foods = foods.filter(f => ((f.brand || '') + ' ' + (f.name || '')).toLowerCase().indexOf(kw) >= 0);
   foods.sort((a, b) => (a.brand || '').localeCompare(b.brand || '', 'zh') || (a.name || '').localeCompare(b.name || '', 'zh'));
