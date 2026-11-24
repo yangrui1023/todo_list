@@ -189,6 +189,45 @@ S.setDietPickerBrand(1);
 S.openDietMealModal('lunch');
 ok(G('ui.diet.kind') === 'all' && G('ui.diet.brand') === '' && G('ui.diet.kw') === '', '重新打开某一餐时筛选复位');
 
+function dayOffset(n) {
+  const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const listNames = () => [...LIST().matchAll(/class="diet-picker-name"><span class="brand">[^<]*<\/span>([^<]+)</g)].map(m => m[1]);
+const entry = (foodId, meal) => ({ id: 'e' + Math.random(), meal: meal || 'breakfast', foodId, kcal: 200, qty: 1, unit: 'serving' });
+
+console.log('\n=== 12. 常用优先：最近 90 天添加次数降序 ===');
+seed();
+G('state.diets = ' + JSON.stringify({
+  [dayOffset(0)]: [entry('f3'), entry('f3'), entry('f3')],
+  [dayOffset(1)]: [entry('f2'), entry('f2')],
+  [dayOffset(120)]: [entry('f1'), entry('f1'), entry('f1'), entry('f1'), entry('f1')]
+}));
+S.renderDietPickerFilters();
+S.renderDietPickerList();
+ok(G('dietFoodUseCounts()["f3"]') === 3, '今天的三次被计入');
+ok(G('dietFoodUseCounts()["f2"]') === 2, '昨天的两次被计入');
+ok(G('dietFoodUseCounts()["f1"]') === undefined, '120 天前的记录不算常用');
+const ord = listNames();
+ok(ord[0] === '全麦三明治' && ord[1] === '拿铁', '用得最多的两项排在最前');
+ok(G('ui.diet.kind') === 'all', '排序发生在筛选之后，没有改动筛选状态');
+
+console.log('\n=== 13. 品牌 chip 也按使用次数排 ===');
+const fl = FILTERS();
+ok(fl.indexOf('>全家<') < fl.indexOf('>星巴克<'), '全家（3 次）排在星巴克（2 次）前');
+ok(fl.indexOf('>星巴克<') < fl.indexOf('>麦当劳<'), '没用过 / 过期的品牌排后面');
+
+console.log('\n=== 14. 都没用过时仍按品类 → 品牌 → 名称 ===');
+seed();
+S.renderDietPickerList();
+const ord2 = listNames();
+ok(ord2[0] === '巨无霸' && ord2[1] === '全麦三明治', '食物品类按品牌中文序（麦当劳 < 全家）');
+ok(ord2[2] === '冰美式' && ord2[3] === '拿铁', '饮品品类排食物后面（全家 < 星巴克）');
+S.setDietPickerKind('drink');
+ok(listNames().join(',') === '冰美式,拿铁', '切品类后常用排序仍在筛选结果内生效');
+S.onDietPickerSearch('拿铁');
+ok(listNames().join(',') === '拿铁', '搜索仍然只留命中项');
+
 console.log('');
 if (fail > 0) { console.log(`FAILED: ${fail} 条断言未通过`); process.exit(1); }
-console.log('PASS: 记账 picker 筛选与就地新增');
+console.log('PASS: 记账 picker 筛选、就地新增与常用排序');

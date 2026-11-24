@@ -5749,9 +5749,44 @@ function onDietPickerSearch(v) {
   renderDietPickerList();
 }
 
-// 当前品类下出现过的品牌（去重 + 中文排序）；kind 为 all 时列全部
+// 记账 picker 的「常用」：只数最近 90 天记过的次数，避免几年前的习惯一直霸榜。
+// 每条饮食明细都带 foodId；自定义记录没有 foodId，本来也不在食物库里，自然不计。
+const DIET_FREQ_DAYS = 90;
+function dietFoodUseCounts() {
+  const counts = {};
+  const diets = (state.diets && typeof state.diets === 'object') ? state.diets : {};
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - (DIET_FREQ_DAYS - 1));
+  const floor = formatDate(cutoff);   // YYYY-MM-DD 可以按字符串比大小
+  Object.keys(diets).forEach(day => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < floor) return;
+    const arr = diets[day];
+    if (!Array.isArray(arr)) return;
+    arr.forEach(e => {
+      if (e && e.foodId) counts[e.foodId] = (counts[e.foodId] || 0) + 1;
+    });
+  });
+  return counts;
+}
+
+// 同频次时按用户排好的品类顺序走，未归类的排最后
+function foodKindOrder(id) {
+  const i = getFoodKinds().findIndex(k => k.id === id);
+  return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+}
+
+// 当前品类下出现过的品牌：用得多的靠前，都没用过时仍是中文排序
 function dietPickerBrands(kind) {
-  return brandsOfKind(kind === 'all' ? '' : kind);
+  const brands = brandsOfKind(kind === 'all' ? '' : kind);
+  const use = dietFoodUseCounts();
+  const perBrand = {};
+  getFoods().forEach(f => {
+    if (kind !== 'all' && f.kind !== kind) return;
+    const b = (f.brand || '').trim();
+    if (b) perBrand[b] = (perBrand[b] || 0) + (use[f.id] || 0);
+  });
+  return brands.sort((a, b) => (perBrand[b] || 0) - (perBrand[a] || 0) || a.localeCompare(b, 'zh-Hans-CN'));
 }
 
 // 筛选条：品类一行 + 品牌一行；品牌行末尾是「＋ 新建品牌」
@@ -5798,7 +5833,12 @@ function renderDietPickerList() {
   let foods = all.filter(f => ui.diet.kind === 'all' || f.kind === ui.diet.kind);
   if (ui.diet.brand) foods = foods.filter(f => (f.brand || '').trim() === ui.diet.brand);
   if (kw) foods = foods.filter(f => ((f.brand || '') + ' ' + (f.name || '')).toLowerCase().indexOf(kw) >= 0);
-  foods.sort((a, b) => (a.brand || '').localeCompare(b.brand || '', 'zh') || (a.name || '').localeCompare(b.name || '', 'zh'));
+  // 常用优先：次数 → 品类顺序 → 品牌 → 名称。筛选 / 搜索照旧先做，排序只在结果集里进行
+  const use = dietFoodUseCounts();
+  foods.sort((a, b) => (use[b.id] || 0) - (use[a.id] || 0)
+    || foodKindOrder(a.kind) - foodKindOrder(b.kind)
+    || (a.brand || '').localeCompare(b.brand || '', 'zh')
+    || (a.name || '').localeCompare(b.name || '', 'zh'));
 
   if (foods.length === 0) {
     // 筛到空 / 搜不到，都直接给一条「新增」的路，不用退出弹窗去食物库
